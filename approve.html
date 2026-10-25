@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>syncme</title>
+<style>body{font:15px system-ui;max-width:580px;min-width:320px;margin:24px}input{width:95%;padding:8px}button{margin:12px 4px 12px 0;padding:8px}li{margin:8px 0}#status{white-space:pre-wrap}</style>
+<h1>syncme</h1>
+<p>Copies a site's cookies into a separate Chrome that your scripts can drive, so they start out logged in. Only add sites you're allowed to automate.</p>
+<p>Only cookies for that exact host get copied. Some sites will still make you log in again.</p>
+<label for="origin">Site</label>
+<input id="origin" type="url" placeholder="https://example.com" autocomplete="off">
+<button id="approve">Add site</button><button id="connect">Connect</button>
+<p id="status" role="status"></p><ul id="approved"></ul>
+<script src="approve.js"></script></html>
