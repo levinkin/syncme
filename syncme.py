@@ -216,6 +216,7 @@ def serve():
     from playwright.sync_api import Error, sync_playwright
     bridge = context = None
     endpoint = None
+    headless = False
     listener = socket.socket()
     listener.bind(('127.0.0.1', 0))
     listener.listen(8)
@@ -280,11 +281,18 @@ def serve():
                                 context.cookies('https://syncme.invalid')
                             except Error:
                                 context = endpoint = None
+                        carried = []
+                        if context is not None and headless and s:
+                            carried = context.cookies()
+                            context.close()
+                            context = endpoint = None
                         if context is None:
+                            headless = s is None
                             profile = STATE / 'browser'
                             profile.mkdir(mode=0o700, exist_ok=True)
                             (profile / 'DevToolsActivePort').unlink(missing_ok=True)
-                            context = pw.chromium.launch_persistent_context(str(profile), channel='chrome', headless=True, args=['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'])
+                            context = pw.chromium.launch_persistent_context(str(profile), channel='chrome', headless=headless, args=['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'])
+                            context.add_cookies(carried)
                             port = int((profile / 'DevToolsActivePort').read_text().splitlines()[0])
                             if not 0 < port < 65536:
                                 raise ValueError('Invalid owned browser endpoint')
