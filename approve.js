@@ -1,39 +1,49 @@
 const status = document.querySelector('#status');
+const question = document.querySelector('#question');
+const copyButton = document.querySelector('#copy');
+const auto = document.querySelector('#auto');
+let site;
 async function render() {
   const {approved = []} = await chrome.storage.local.get('approved');
   const list = document.querySelector('#approved');
   list.replaceChildren();
   for (const value of approved) {
     const li = document.createElement('li');
-    li.append(document.createTextNode(value + ' '));
+    li.append(document.createTextNode(new URL(value).host));
     const button = document.createElement('button');
     button.textContent = 'Remove';
     button.onclick = async () => {
+      const {approved = []} = await chrome.storage.local.get('approved');
       await chrome.storage.local.set({approved: approved.filter(x => x !== value)});
-      status.textContent = 'Removed. The syncme browser keeps cookies it already has until you clear them.';
+      status.textContent = 'Removed. The AI browser keeps cookies it already has.';
       await render();
     };
     li.append(button); list.append(li);
   }
 }
-document.querySelector('#approve').onclick = async () => {
+chrome.tabs.query({active: true, currentWindow: true}).then(([tab]) => {
+  const u = tab?.url ? new URL(tab.url) : null;
+  if (u && ['http:', 'https:'].includes(u.protocol)) {
+    site = u.origin;
+    question.textContent = `Copy ${u.host} to your AI browser?`;
+  } else {
+    question.textContent = 'Open a website to copy it.';
+    copyButton.hidden = true;
+  }
+});
+copyButton.onclick = async () => {
+  copyButton.disabled = true;
+  status.textContent = 'Copying...';
   try {
-    const value = document.querySelector('#origin').value;
-    const u = new URL(value);
-    if (!['http:', 'https:'].includes(u.protocol) || u.origin !== value || u.username || u.password || u.pathname !== '/' || u.search || u.hash) throw Error('Enter just the site, like https://example.com, with no path or trailing slash.');
-    const {approved = []} = await chrome.storage.local.get('approved');
-    await chrome.storage.local.set({approved: [...new Set([...approved, value])]});
-    await chrome.runtime.sendMessage({op: 'connect'});
-    status.textContent = 'Added.'; await render();
-  } catch (error) { status.textContent = error.message; }
+    const result = await chrome.runtime.sendMessage({op: 'copy', origin: site});
+    status.textContent = result?.ok ? `Copied ${result.count} cookies.` : result?.error === 'Busy' ? 'Busy, try again in a moment.' : 'Copy failed. If this is a new setup, run syncme.py install.';
+  } catch (_) {
+    status.textContent = 'Copy failed. If this is a new setup, run syncme.py install.';
+  } finally {
+    copyButton.disabled = false;
+  }
+  await render();
 };
-const show = connected => { status.textContent = connected ? 'Connected.' : 'Not connected. Run syncme.py install, then click Connect.'; };
-document.querySelector('#connect').onclick = async () => {
-  status.textContent = 'Connecting...';
-  await chrome.runtime.sendMessage({op: 'connect'});
-  const {connected} = await chrome.storage.session.get('connected');
-  if (connected) show(true);
-};
-chrome.storage.session.onChanged.addListener(changes => { if (changes.connected) show(changes.connected.newValue); });
-chrome.storage.session.get('connected').then(({connected}) => show(connected));
+chrome.storage.local.get('autoSync').then(({autoSync}) => { auto.checked = autoSync === true; });
+auto.onchange = () => chrome.storage.local.set({autoSync: auto.checked});
 render();
