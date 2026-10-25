@@ -223,19 +223,43 @@ def serve():
     with sync_playwright() as pw:
         try:
             running = True
+            def ask(message):
+                nonce = secrets.token_hex(16)
+                send(bridge, {**message, 'id': nonce})
+                while True:
+                    response = receive(bridge)
+                    if response.get('id') == nonce:
+                        return response
+                    if response.get('op') != 'copy' or not isinstance(response.get('id'), str) or len(response['id']) > 64:
+                        raise ValueError('Unexpected bridge message')
+                    send(bridge, {'op': 'copied', 'id': response['id'], 'error': 'Busy'})
             while running:
                 ready, _, _ = select.select([listener] + ([bridge] if bridge else []), [], [])
+                s = None
+                reply = {}
                 if bridge and bridge in ready:
-                    bridge.close(); bridge = None
-                if listener not in ready:
+                    try:
+                        request = receive(bridge)
+                    except (OSError, ValueError, EOFError):
+                        request = {}
+                    if request.get('op') != 'copy' or not isinstance(request.get('id'), str) or len(request['id']) > 64:
+                        bridge.close(); bridge = None
+                        continue
+                    reply = {'op': 'copied', 'id': request['id']}
+                    request = {'op': 'sync', 'origin': request.get('origin')}
+                    target = bridge
+                elif listener in ready:
+                    s, _ = listener.accept()
+                    s.settimeout(3)
+                    target = s
+                else:
                     continue
-                s, _ = listener.accept()
-                s.settimeout(3)
                 phase = 'ipc'
                 try:
-                    if not authorize(s, token):
-                        continue
-                    request = receive(s)
+                    if s:
+                        if not authorize(s, token):
+                            continue
+                        request = receive(s)
                     op = request.get('op')
                     if op == 'bridge':
                         if bridge:
@@ -243,24 +267,17 @@ def serve():
                         send(s, {'ok': True})
                         bridge, s = s, None
                         bridge.settimeout(20)
-                    elif op == 'sync':
+                    elif op in ('sync', 'open'):
                         phase = 'origin'
-                        value = request.get('origin')
-                        u = origin(value)
+                        values = [request.get('origin')] if op == 'sync' else []
+                        for value in values:
+                            origin(value)
                         phase = 'bridge'
-                        if not bridge:
+                        if values and not bridge:
                             raise ValueError('Bridge not connected')
-                        nonce = secrets.token_hex(16)
-                        send(bridge, {'op': 'sync', 'origin': value, 'id': nonce})
-                        response = receive(bridge)
-                        if response.get('id') != nonce or response.get('origin') != value or response.get('error'):
-                            raise ValueError('Origin unavailable or not approved')
-                        phase = 'cookies'
-                        cookies = cookies_for(u, response.get('cookies'))
-                        host = re.compile(r'^\.?' + re.escape(u.hostname) + '$')
                         if context is not None:
                             try:
-                                context.clear_cookies(domain=host)
+                                context.cookies('https://syncme.invalid')
                             except Error:
                                 context = endpoint = None
                         if context is None:
@@ -272,23 +289,40 @@ def serve():
                             if not 0 < port < 65536:
                                 raise ValueError('Invalid owned browser endpoint')
                             endpoint = 'http://127.0.0.1:' + str(port)
-                            context.clear_cookies(domain=host)
-                        context.add_cookies(cookies)
-                        send(s, {'ok': True, 'cdp': endpoint, 'count': len(cookies)})
+                            if bridge:
+                                listed = ask({'op': 'list'})
+                                if not isinstance(listed.get('origins'), list) or len(listed['origins']) > 1000:
+                                    raise ValueError('Invalid site list')
+                                values += [value for value in listed['origins'] if value not in values]
+                        count = 0
+                        for value in values:
+                            phase = 'bridge'
+                            u = origin(value)
+                            response = ask({'op': 'sync', 'origin': value})
+                            if response.get('origin') != value or response.get('error'):
+                                raise ValueError('Origin unavailable or not approved')
+                            phase = 'cookies'
+                            cookies = cookies_for(u, response.get('cookies'))
+                            for c in context.cookies():
+                                if c['domain'].removeprefix('.') == u.hostname and (u.scheme == 'https' or not c['secure']):
+                                    context.clear_cookies(name=c['name'], domain=c['domain'], path=c['path'])
+                            context.add_cookies(cookies)
+                            count += len(cookies)
+                        send(target, {**reply, 'ok': True, 'cdp': endpoint, 'count': count})
                     elif op in ('stop', 'shutdown'):
                         if context:
                             context.close(); context = None; endpoint = None
-                        send(s, {'ok': True})
+                        send(target, {**reply, 'ok': True})
                         running = op != 'shutdown'
                     else:
-                        send(s, {'error': 'Unknown operation'})
+                        send(target, {**reply, 'error': 'Unknown operation'})
                 except (ValueError, OSError, EOFError):
-                    if s:
-                        try: send(s, {'error': 'Request rejected', 'phase': phase})
+                    if s or reply:
+                        try: send(target, {**reply, 'error': 'Request rejected', 'phase': phase})
                         except OSError: pass
                 except Exception:
-                    if s:
-                        try: send(s, {'error': 'Owned browser operation failed'})
+                    if s or reply:
+                        try: send(target, {**reply, 'error': 'Owned browser operation failed'})
                         except OSError: pass
                 finally:
                     if s: s.close()
@@ -329,23 +363,24 @@ def main():
     if command == 'native': native()
     elif command == 'serve': serve()
     elif command == 'install': install()
-    elif command in ('sync', 'stop', 'shutdown'):
+    elif command in ('sync', 'open', 'stop', 'shutdown'):
         if len(sys.argv) != (3 if command == 'sync' else 2):
-            raise ValueError('Usage: syncme.py sync https://example.com | stop | shutdown | install')
+            raise ValueError('Usage: syncme.py sync https://example.com | open | stop | shutdown | install')
         request = {'op': command}
         if command == 'sync':
             origin(sys.argv[2]); request['origin'] = sys.argv[2]
-        s = start_server(command == 'sync')
+        s = start_server(command in ('sync', 'open'))
         if s is None:
             print(json.dumps({'ok': True}))
             return
         with s:
+            s.settimeout(120)
             send(s, request)
             response = receive(s)
         print(json.dumps(response))
         if response.get('error'): sys.exit(1)
     else:
-        raise ValueError('Usage: syncme.py install | sync https://example.com | stop | shutdown')
+        raise ValueError('Usage: syncme.py install | sync https://example.com | open | stop | shutdown')
 
 
 if __name__ == '__main__':
