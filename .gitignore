@@ -2,3 +2,4 @@ native
 native.cmd
 local.syncme.json
 __pycache__/
+syncme.zip

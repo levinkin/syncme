@@ -2,6 +2,13 @@
   "manifest_version": 3,
   "name": "syncme",
   "version": "1.0.0",
+  "description": "copy your logins for a site into a separate chrome that your ai agents and scripts can use",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyDi/Cstz6nR487vgWA2QTykf48Svj3DFUeSMva5uZdxoYIJSxKW1S9d+YGFFM0osrctIUWL6YbeGQYxWcnakI4oItc9x0oKO9w5lLYm1Azzn3zy/Pj/8dN647SyBjeyjW5EDAs2eNwWj15qjOy+y1u3Oqep/8kx0eVHwoHWwojH2trvOIBUwa1zd9eJ8fV4lcrEUr9okjlaZEB3s+qYR/D/ezvOlP3VMHztCL1dptv/Y8DtVVFqC+AkfaOqLEGYfaXufF+cdG/V6DBu6YZ1mww1VET/rjcGKCl+OsEFIwIOU0usOWbLB1JnspVupeq8CDe+baHBU24qQZc3U7UpaUQIDAQAB",
   "permissions": [
     "cookies",
@@ -16,7 +23,11 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "approve.html"
+    "default_popup": "approve.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    }
   },
   "options_page": "approve.html"
 }

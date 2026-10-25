@@ -374,11 +374,22 @@ def install():
     print(json.dumps({'installed': str(host), 'extension': EXTENSION, 'load_unpacked': str(ROOT)}))
 
 
+def pack():
+    import zipfile
+    store = {k: v for k, v in MANIFEST.items() if k != 'key'}
+    with zipfile.ZipFile(ROOT / 'syncme.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr('manifest.json', json.dumps(store, indent=2))
+        for name in ['background.js', 'approve.html', 'approve.js'] + [p.relative_to(ROOT).as_posix() for p in sorted((ROOT / 'icons').glob('*.png'))]:
+            z.write(ROOT / name, name)
+    print(json.dumps({'packed': str(ROOT / 'syncme.zip')}))
+
+
 def main():
     command = sys.argv[1] if len(sys.argv) > 1 else ''
     if command == 'native': native()
     elif command == 'serve': serve()
     elif command == 'install': install()
+    elif command == 'pack': pack()
     elif command in ('sync', 'open', 'stop', 'shutdown'):
         if len(sys.argv) != (3 if command == 'sync' else 2):
             raise ValueError('Usage: syncme.py sync https://example.com | open | stop | shutdown | install')
@@ -396,7 +407,7 @@ def main():
         print(json.dumps(response))
         if response.get('error'): sys.exit(1)
     else:
-        raise ValueError('Usage: syncme.py install | sync https://example.com | open | stop | shutdown')
+        raise ValueError('Usage: syncme.py install | sync https://example.com | open | stop | shutdown | pack')
 
 
 if __name__ == '__main__':
