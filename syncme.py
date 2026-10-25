@@ -284,7 +284,7 @@ def serve():
                             profile = STATE / 'browser'
                             profile.mkdir(mode=0o700, exist_ok=True)
                             (profile / 'DevToolsActivePort').unlink(missing_ok=True)
-                            context = pw.chromium.launch_persistent_context(str(profile), channel='chrome', headless=False, args=['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'])
+                            context = pw.chromium.launch_persistent_context(str(profile), channel='chrome', headless=True, args=['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'])
                             port = int((profile / 'DevToolsActivePort').read_text().splitlines()[0])
                             if not 0 < port < 65536:
                                 raise ValueError('Invalid owned browser endpoint')
