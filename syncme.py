@@ -172,7 +172,7 @@ def start_server(spawn):
             if not spawn:
                 return None
             if attempt == 0:
-                subprocess.Popen([sys.executable, str(ROOT / 'syncme.py'), 'serve'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                subprocess.Popen([sys.executable, str(ROOT / 'syncme.py'), 'serve'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             time.sleep(0.1)
     raise ValueError('Could not start syncme bridge')
 
