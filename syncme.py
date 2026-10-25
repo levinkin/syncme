@@ -311,7 +311,11 @@ def serve():
                         send(target, {**reply, 'ok': True, 'cdp': endpoint, 'count': count})
                     elif op in ('stop', 'shutdown'):
                         if context:
-                            context.close(); context = None; endpoint = None
+                            try:
+                                context.close()
+                            except Error:
+                                pass
+                            context = endpoint = None
                         send(target, {**reply, 'ok': True})
                         running = op != 'shutdown'
                     else:
@@ -327,7 +331,11 @@ def serve():
                 finally:
                     if s: s.close()
         finally:
-            if context: context.close()
+            if context:
+                try:
+                    context.close()
+                except Error:
+                    pass
             if bridge: bridge.close()
             listener.close()
             (STATE / 'endpoint.json').unlink(missing_ok=True)
