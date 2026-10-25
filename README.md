@@ -46,3 +46,7 @@ with sync_playwright() as pw:
 - the ai browser profile lives in `~/Library/Application Support/syncme` on mac and `%LOCALAPPDATA%\syncme` on windows
 - removing a site from the list stops future copies, but the ai browser keeps cookies it already has
 - the bridge only listens on 127.0.0.1 and only takes requests from the extension or from a local token only your user can read
+
+## license
+
+[PolyForm Noncommercial 1.0.0](LICENSE). free to use, change and share for anything that isn't commercial. if you want to use it for a business, ask me.
