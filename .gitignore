@@ -1,5 +1,3 @@
-native
-native.cmd
-local.syncme.json
+node_modules/
 __pycache__/
 syncme.zip

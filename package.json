@@ -1,0 +1,17 @@
+{
+  "name": "syncme-mcp",
+  "version": "1.0.0",
+  "description": "copy your logins for a site into a separate chrome that your ai agents and scripts can use",
+  "type": "module",
+  "bin": {
+    "syncme-mcp": "syncme.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0",
+    "ws": "^8.18.0"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0"
+}
