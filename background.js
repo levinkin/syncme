@@ -71,7 +71,7 @@ function connect() {
         await chrome.storage.local.set({approved: [...new Set([...now, u.origin])]});
       }
       stage = 'cookies';
-      const cookies = (await chrome.cookies.getAll({domain: u.hostname})).filter(c => c.domain.replace(/^\./, '') === u.hostname && !c.partitionKey && (!c.secure || u.protocol === 'https:'));
+      const cookies = (await chrome.cookies.getAll({})).filter(c => (c.hostOnly ? c.domain === u.hostname : ('.' + u.hostname).endsWith(c.domain)) && !c.partitionKey && (!c.secure || u.protocol === 'https:'));
       send({id: message.id, origin: u.origin, cookies});
     } catch (_) { try { send({id: message.id, error: stage === 'cookies' ? 'Cookie API refused' : 'Origin unavailable or not approved'}); } catch (_) {} }
   };

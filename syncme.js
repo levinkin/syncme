@@ -7,6 +7,7 @@ import {dirname, join} from 'node:path';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright-core';
+import {getDomain} from 'tldts';
 import {WebSocket, WebSocketServer} from 'ws';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -115,13 +116,15 @@ function origin(value) {
 
 function cookiesFor(site, cookies) {
   if (!Array.isArray(cookies) || cookies.length > 3000) throw rejected('cookies');
+  const registrable = getDomain(site.hostname, {allowPrivateDomains: true});
   const result = [];
   for (const c of cookies) {
-    if (!c || typeof c !== 'object' || typeof c.domain !== 'string' || c.domain.replace(/^\./, '') !== site.hostname || c.partitionKey) throw rejected('cookies');
+    if (!c || typeof c !== 'object' || typeof c.domain !== 'string' || c.partitionKey) throw rejected('cookies');
     for (const field of ['name', 'value', 'domain', 'path']) {
       if (typeof c[field] !== 'string' || c[field].length > 16384) throw rejected('cookies');
     }
     if (!c.path.startsWith('/') || ['secure', 'httpOnly', 'hostOnly', 'session'].some(field => typeof c[field] !== 'boolean')) throw rejected('cookies');
+    if (c.hostOnly ? c.domain !== site.hostname : !registrable || !c.domain.startsWith('.') || c.domain.length <= registrable.length || !('.' + site.hostname).endsWith(c.domain)) throw rejected('cookies');
     if (c.secure && site.protocol !== 'https:') throw rejected('cookies');
     const item = {name: c.name, value: c.value, path: c.path, secure: c.secure, httpOnly: c.httpOnly};
     item.domain = c.hostOnly ? site.hostname : c.domain;
@@ -260,7 +263,7 @@ async function serve() {
       if (response.origin !== value || response.error) throw rejected('bridge');
       const cookies = cookiesFor(site, response.cookies);
       for (const cookie of await context.cookies()) {
-        if (cookie.domain.replace(/^\./, '') === site.hostname && (site.protocol === 'https:' || !cookie.secure)) await context.clearCookies({name: cookie.name, domain: cookie.domain, path: cookie.path});
+        if ((cookie.domain === site.hostname || cookie.domain.startsWith('.') && ('.' + site.hostname).endsWith(cookie.domain)) && (site.protocol === 'https:' || !cookie.secure)) await context.clearCookies({name: cookie.name, domain: cookie.domain, path: cookie.path});
       }
       await context.addCookies(cookies);
       count += cookies.length;
