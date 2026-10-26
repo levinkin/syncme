@@ -389,12 +389,12 @@ function pack() {
   try {
     const {key, ...store} = MANIFEST;
     writeFileSync(join(stage, 'manifest.json'), JSON.stringify(store, null, 2));
-    for (const name of ['background.js', 'approve.html', 'approve.js']) copyFileSync(join(ROOT, name), join(stage, name));
+    for (const name of ['background.js', 'approve.html', 'approve.js', 'options.html', 'options.js']) copyFileSync(join(ROOT, name), join(stage, name));
     cpSync(join(ROOT, 'icons'), join(stage, 'icons'), {recursive: true});
     rmSync(zip, {force: true});
     const result = process.platform === 'win32'
       ? spawnSync('powershell', ['-NoProfile', '-Command', `Compress-Archive -Path '${join(stage, '*')}' -DestinationPath '${zip}' -Force`], {stdio: 'ignore'})
-      : spawnSync('zip', ['-r', '-X', '-q', zip, 'manifest.json', 'background.js', 'approve.html', 'approve.js', 'icons'], {cwd: stage, stdio: 'ignore'});
+      : spawnSync('zip', ['-r', '-X', '-q', zip, 'manifest.json', 'background.js', 'approve.html', 'approve.js', 'options.html', 'options.js', 'icons'], {cwd: stage, stdio: 'ignore'});
     if (result.status !== 0) throw Error('Pack failed');
   } finally {
     rmSync(stage, {recursive: true, force: true});

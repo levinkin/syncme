@@ -46,7 +46,7 @@ await (await browser.contexts()[0].newPage()).goto('https://example.com');
 
 ## mcp
 
-you can also hook it up as an mcp server so your ai can ask for a site itself. it calls `copy_site` with something like `https://github.com`, you get a popup in chrome asking if it can have that login, and if you say yes it copies it and gets back the cdp url. there's also `open_browser` and `close_browser`.
+you can also hook it up as an mcp server so your ai can ask for a site itself. it calls `copy_site` with something like `https://github.com`, you get a popup in chrome asking if it can have that login, and if you say yes it copies it and gets back the cdp url. turn on yolo in the syncme settings to skip that popup and let your ai copy any site it asks for. there's also `open_browser` and `close_browser`.
 
 ```
 claude mcp add --scope user syncme -- npx -y syncme-mcp

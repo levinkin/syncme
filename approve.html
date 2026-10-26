@@ -1,16 +1,8 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><title>syncme</title>
-<style>body{font:15px system-ui;width:340px;margin:16px}button{padding:8px 14px}li{margin:6px 0}li button{padding:2px 8px;margin-left:6px}label{display:block;margin:14px 0}#question{font-weight:600}</style>
+<style>body{font:15px system-ui;width:340px;margin:16px}button{padding:8px 14px}#question{font-weight:600}#options{float:right;padding:4px 8px}</style>
+<button id="options">Options</button>
 <p id="question"></p>
 <button id="copy">Copy</button> <button id="deny" hidden>No</button>
 <p id="status" role="status"></p>
-<div id="settings">
-<label><input type="checkbox" id="auto"> Copy all saved sites when the AI browser starts</label>
-<h2>Saved sites</h2>
-<ul id="approved"></ul>
-<h2>Connect your ai</h2>
-<p id="waiting" hidden>connect an ai app first.</p>
-<p id="pairing" hidden><span></span> <button id="repair">Re-pair</button></p>
-<button id="claude">Copy Claude Code command</button> <button id="setup">Copy setup command</button>
-</div>
 <script src="approve.js"></script></html>

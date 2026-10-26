@@ -29,5 +29,8 @@
       "32": "icons/32.png"
     }
   },
-  "options_page": "approve.html"
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  }
 }

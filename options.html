@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>syncme options</title>
+<style>:root{color-scheme:light dark}body{font:14px system-ui;min-width:420px;margin:16px}h2{font-size:15px;margin:20px 0 8px}label{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:14px 0 2px;font-weight:500}.note{opacity:.7;font-size:12px;margin:0 0 10px}ul{padding:0;list-style:none}li{display:flex;justify-content:space-between;align-items:center;margin:6px 0}li button{padding:2px 8px}</style>
+<h2>Options</h2>
+<label for="auto">Copy saved sites on start <input type="checkbox" id="auto"></label>
+<p class="note">Copies every saved site when the AI browser starts.</p>
+<label for="yolo">Yolo mode <input type="checkbox" id="yolo"></label>
+<p class="note">Copies any site your AI asks for without a popup. Installing syncme already means you're ok with that.</p>
+<h2>Saved sites</h2>
+<ul id="approved"></ul>
+<p id="status" class="note" role="status"></p>
+<h2>Connect your AI</h2>
+<p id="waiting" class="note" hidden>Connect an AI app first.</p>
+<p id="pairing" class="note" hidden><span></span> <button id="repair">Re-pair</button></p>
+<button id="claude">Copy Claude Code command</button> <button id="setup">Copy setup command</button>
+<script src="options.js"></script></html>

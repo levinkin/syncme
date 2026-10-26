@@ -59,14 +59,14 @@ function connect() {
       return;
     }
     if (message.op === 'copied') { pending.get(message.id)?.(message); pending.delete(message.id); return; }
-    const {approved = [], autoSync = false} = await chrome.storage.local.get(['approved', 'autoSync']);
+    const {approved = [], autoSync = false, yolo = false} = await chrome.storage.local.get(['approved', 'autoSync', 'yolo']);
     if (message.op === 'list') { send({id: message.id, origins: autoSync ? approved : []}); return; }
     let stage = 'request';
     try {
       if (message.op !== 'sync' || typeof message.id !== 'string') throw Error('Invalid request');
       const u = origin(message.origin);
       if (!approved.includes(u.origin)) {
-        if (!await allow(u.origin)) throw Error('Origin not approved');
+        if (!yolo && !await allow(u.origin)) throw Error('Origin not approved');
         const {approved: now = []} = await chrome.storage.local.get('approved');
         await chrome.storage.local.set({approved: [...new Set([...now, u.origin])]});
       }
