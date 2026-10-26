@@ -1,6 +1,6 @@
 {
   "name": "syncme-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "copy your logins for a site into a separate chrome that your ai agents and scripts can use",
   "type": "module",
   "bin": {
