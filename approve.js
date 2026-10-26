@@ -44,9 +44,9 @@ if (!requested) copyButton.onclick = async () => {
   status.textContent = 'Copying...';
   try {
     const result = await chrome.runtime.sendMessage({op: 'copy', origin: site});
-    status.textContent = result?.ok ? `Copied ${result.count} cookies.` : result?.error === 'Busy' ? 'Busy, try again in a moment.' : 'Copy failed. If this is a new setup, run syncme.py install.';
+    status.textContent = result?.ok ? `Copied ${result.count} cookies.` : result?.error === 'Busy' ? 'Busy, try again in a moment.' : result?.error === 'Not connected' ? 'Connect an ai app first.' : 'Copy failed.';
   } catch (_) {
-    status.textContent = 'Copy failed. If this is a new setup, run syncme.py install.';
+    status.textContent = 'Copy failed.';
   } finally {
     copyButton.disabled = false;
   }
@@ -54,4 +54,23 @@ if (!requested) copyButton.onclick = async () => {
 };
 chrome.storage.local.get('autoSync').then(({autoSync}) => { auto.checked = autoSync === true; });
 auto.onchange = () => chrome.storage.local.set({autoSync: auto.checked});
+const server = {name: 'syncme', command: 'npx', args: ['-y', 'syncme-mcp']};
+const links = {
+  cursor: 'cursor://anysphere.cursor-deeplink/mcp/install?name=syncme&config=' + btoa(JSON.stringify({command: server.command, args: server.args})),
+  vscode: 'vscode:mcp/install?' + encodeURIComponent(JSON.stringify(server)),
+};
+for (const [id, href] of Object.entries(links)) {
+  const link = document.querySelector('#' + id);
+  link.href = href;
+  link.hidden = false;
+}
+document.querySelector('#claude').onclick = () => navigator.clipboard.writeText('claude mcp add syncme -- npx -y syncme-mcp');
+document.querySelector('#setup').onclick = () => navigator.clipboard.writeText('npx -y syncme-mcp setup');
+chrome.storage.session.get(['connected', 'pairing']).then(({connected, pairing}) => {
+  document.querySelector('#waiting').hidden = connected === true || Boolean(pairing);
+  const box = document.querySelector('#pairing');
+  box.hidden = !pairing;
+  box.firstChild.textContent = pairing === 'lost' ? 'syncme lost its pairing with this extension.' : 'syncme is paired with a different extension. Run npx -y syncme-mcp unpair, then hit Re-pair.';
+});
+document.querySelector('#repair').onclick = () => { chrome.runtime.sendMessage({op: 'repair'}); document.querySelector('#pairing').hidden = true; };
 render();
