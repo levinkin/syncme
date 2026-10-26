@@ -5,7 +5,7 @@ let site;
 const requested = new URLSearchParams(location.search).get('site');
 if (requested) {
   question.textContent = `Your AI needs your ${new URL(requested).host} login to continue. Copy it?`;
-  document.querySelector('footer').hidden = true;
+  document.querySelector('#options').hidden = true;
   const deny = document.querySelector('#deny');
   deny.hidden = false;
   copyButton.onclick = () => chrome.runtime.sendMessage({op: 'allow', answer: true});
