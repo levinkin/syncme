@@ -54,16 +54,6 @@ if (!requested) copyButton.onclick = async () => {
 };
 chrome.storage.local.get('autoSync').then(({autoSync}) => { auto.checked = autoSync === true; });
 auto.onchange = () => chrome.storage.local.set({autoSync: auto.checked});
-const server = {name: 'syncme', command: 'npx', args: ['-y', 'syncme-mcp']};
-const links = {
-  cursor: 'cursor://anysphere.cursor-deeplink/mcp/install?name=syncme&config=' + btoa(JSON.stringify({command: server.command, args: server.args})),
-  vscode: 'vscode:mcp/install?' + encodeURIComponent(JSON.stringify(server)),
-};
-for (const [id, href] of Object.entries(links)) {
-  const link = document.querySelector('#' + id);
-  link.href = href;
-  link.hidden = false;
-}
 document.querySelector('#claude').onclick = () => navigator.clipboard.writeText('claude mcp add syncme -- npx -y syncme-mcp');
 document.querySelector('#setup').onclick = () => navigator.clipboard.writeText('npx -y syncme-mcp setup');
 chrome.storage.session.get(['connected', 'pairing']).then(({connected, pairing}) => {
