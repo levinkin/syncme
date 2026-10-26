@@ -2,6 +2,8 @@
 
 copies your logins for a site from your normal chrome into a separate chrome that ai agents and scripts can drive. so jev, browser-use or playwright can use your accounts without touching your real browser.
 
+syncme comes in two parts: the [chrome extension](https://chromewebstore.google.com/detail/dcgmgkdgmbjgnchjdmokimppnhfinpfp) and [syncme-mcp](https://www.npmjs.com/package/syncme-mcp), the npm bridge it talks to. the source for both is on [github](https://github.com/levinkin/syncme).
+
 ## how it works
 
 1. when you're on a site you want, click the syncme icon and it asks if you want to copy it over
@@ -18,14 +20,14 @@ needs chrome and node 20 or newer. works on mac and windows.
 
 there's nothing to install: the extension talks to the bridge over a websocket on 127.0.0.1, and any command starts the bridge itself.
 
-1. install the extension (chrome web store, or load this folder unpacked from `chrome://extensions` with developer mode on)
-2. click the syncme icon and use one of the connect buttons, or run `npx -y syncme-mcp setup` to wire up claude code, codex, cursor, windsurf and claude desktop
+1. install the extension from the [chrome web store](https://chromewebstore.google.com/detail/dcgmgkdgmbjgnchjdmokimppnhfinpfp), or load this folder unpacked from `chrome://extensions` with developer mode on
+2. click the syncme icon, hit the gear, and use one of the connect buttons, or run `npx -y syncme-mcp setup` to wire up claude code, codex, cursor, windsurf and claude desktop
 
 ## commands
 
 ```
 npx -y syncme-mcp open                       # start the ai browser, prints {"cdp": "http://127.0.0.1:<port>"}
-npx -y syncme-mcp sync https://example.com   # copy one site, asks you in chrome first if it's not saved yet
+npx -y syncme-mcp sync https://example.com   # copy one site, asks you in chrome first unless it's saved or yolo is on
 npx -y syncme-mcp stop                       # close the ai browser
 npx -y syncme-mcp shutdown                   # close it and stop the bridge
 npx -y syncme-mcp setup                      # add the mcp server to the ai apps you have installed
@@ -46,7 +48,7 @@ await (await browser.contexts()[0].newPage()).goto('https://example.com');
 
 ## mcp
 
-you can also hook it up as an mcp server so your ai can ask for a site itself. it calls `copy_site` with something like `https://github.com`, you get a popup in chrome asking if it can have that login, and if you say yes it copies it and gets back the cdp url. turn on yolo in the syncme settings to skip that popup and let your ai copy any site it asks for. there's also `open_browser` and `close_browser`.
+you can also hook it up as an mcp server so your ai can ask for a site itself. it calls `copy_site` with something like `https://github.com`, you get a popup in chrome asking if it can have that login, and if you say yes it copies it and gets back the cdp url. turn on yolo mode in the syncme options (the gear in the popup) to skip that popup and let your ai copy any site it asks for. there's also `open_browser` and `close_browser`.
 
 ```
 claude mcp add --scope user syncme -- npx -y syncme-mcp
