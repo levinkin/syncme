@@ -21,7 +21,15 @@ async function render() {
     li.append(button); list.append(li);
   }
 }
-chrome.tabs.query({active: true, currentWindow: true}).then(([tab]) => {
+const requested = new URLSearchParams(location.search).get('site');
+if (requested) {
+  question.textContent = `Your AI wants your ${new URL(requested).host} login. Copy it?`;
+  document.querySelector('#settings').hidden = true;
+  const deny = document.querySelector('#deny');
+  deny.hidden = false;
+  copyButton.onclick = () => chrome.runtime.sendMessage({op: 'allow', answer: true});
+  deny.onclick = () => chrome.runtime.sendMessage({op: 'allow', answer: false});
+} else chrome.tabs.query({active: true, currentWindow: true}).then(([tab]) => {
   const u = tab?.url ? new URL(tab.url) : null;
   if (u && ['http:', 'https:'].includes(u.protocol)) {
     site = u.origin;
@@ -31,7 +39,7 @@ chrome.tabs.query({active: true, currentWindow: true}).then(([tab]) => {
     copyButton.hidden = true;
   }
 });
-copyButton.onclick = async () => {
+if (!requested) copyButton.onclick = async () => {
   copyButton.disabled = true;
   status.textContent = 'Copying...';
   try {

@@ -5,6 +5,21 @@ function origin(value) {
   return u;
 }
 const pending = new Map();
+const asking = new Map();
+async function allow(value) {
+  const w = await chrome.windows.create({url: 'approve.html?site=' + encodeURIComponent(value), type: 'popup', width: 380, height: 220, focused: true});
+  return new Promise(resolve => {
+    const timer = setTimeout(() => done(false), 100000);
+    function done(answer) {
+      if (!asking.delete(w.id)) return;
+      clearTimeout(timer);
+      chrome.windows.remove(w.id).catch(() => {});
+      resolve(answer);
+    }
+    asking.set(w.id, done);
+  });
+}
+chrome.windows.onRemoved.addListener(id => asking.get(id)?.(false));
 function connect() {
   if (port) return;
   port = chrome.runtime.connectNative('local.syncme');
@@ -24,7 +39,11 @@ function connect() {
     try {
       if (message.op !== 'sync' || typeof message.id !== 'string') throw Error('Invalid request');
       const u = origin(message.origin);
-      if (!approved.includes(u.origin)) throw Error('Origin not approved');
+      if (!approved.includes(u.origin)) {
+        if (!await allow(u.origin)) throw Error('Origin not approved');
+        const {approved: now = []} = await chrome.storage.local.get('approved');
+        await chrome.storage.local.set({approved: [...new Set([...now, u.origin])]});
+      }
       stage = 'cookies';
       const cookies = (await chrome.cookies.getAll({domain: u.hostname})).filter(c => c.domain.replace(/^\./, '') === u.hostname && !c.partitionKey && (!c.secure || u.protocol === 'https:'));
       port.postMessage({id: message.id, origin: u.origin, cookies});
@@ -44,7 +63,9 @@ async function copy(value) {
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(connect);
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
-  if (sender.id !== chrome.runtime.id || message.op !== 'copy') return;
+  if (sender.id !== chrome.runtime.id) return;
+  if (message.op === 'allow') { asking.get(sender.tab?.windowId)?.(message.answer === true); return; }
+  if (message.op !== 'copy') return;
   copy(message.origin).then(reply, () => reply({error: 'Invalid site'}));
   return true;
 });
