@@ -1,14 +1,14 @@
 # syncme
 
-copies your logins for a site from your normal chrome into a separate chrome that ai agents and scripts can drive. so jev, browser-use, playwright or whatever can use your accounts without touching your real browser.
+copies your logins for a site from your normal chrome into a separate chrome that ai agents and scripts can drive. so jev, browser-use or playwright can use your accounts without touching your real browser.
 
 ## how it works
 
-1. go to a site you're logged into, click the syncme icon, hit copy
+1. when you're on a site you want, click the syncme icon and it asks if you want to copy it over
 2. syncme grabs that site's cookies and puts them in its own chrome profile (the "ai browser"). this runs headless in the background, nothing pops up
 3. when a script needs the browser, run `syncme.py open`. the ai browser opens as normal chrome with your logins already in it and prints a cdp url to connect to
 
-it only copies cookies for sites you added. no passwords, no other sites. your real chrome profile never gets touched.
+it only copies cookies for sites you said yes to. no passwords, no other sites. syncme never touches your real chrome profile.
 
 there's also a setting to re-copy all your saved sites every time the ai browser starts, so logins stay fresh.
 
@@ -24,7 +24,7 @@ needs chrome, python 3 and playwright (`pip install playwright`). works on mac a
 
 ```
 python3 syncme.py open                       # start the ai browser, prints {"cdp": "http://127.0.0.1:<port>"}
-python3 syncme.py sync https://example.com   # copy one saved site, then open
+python3 syncme.py sync https://example.com   # copy one site, asks you in chrome first if it's not saved yet
 python3 syncme.py stop                       # close the ai browser
 python3 syncme.py shutdown                   # close it and stop the bridge
 ```
@@ -40,6 +40,23 @@ with sync_playwright() as pw:
     page = pw.chromium.connect_over_cdp(cdp).contexts[0].new_page()
     page.goto('https://example.com')
 ```
+
+## mcp
+
+you can also hook it up as an mcp server so your ai can ask for a site itself. it calls `copy_site` with something like `https://github.com`, you get a popup in chrome asking if it can have that login, and if you say yes it copies it and gets back the cdp url. there's also `open_browser` and `close_browser`.
+
+```json
+{
+  "mcpServers": {
+    "syncme": {
+      "command": "python3",
+      "args": ["/path/to/syncme/syncme.py", "mcp"]
+    }
+  }
+}
+```
+
+keep chrome open with the extension for it to work, since syncme takes the cookies from there.
 
 ## notes
 
