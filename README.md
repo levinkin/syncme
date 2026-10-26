@@ -6,7 +6,7 @@ copies your logins for a site from your normal chrome into a separate chrome tha
 
 1. when you're on a site you want, click the syncme icon and it asks if you want to copy it over
 2. syncme grabs that site's cookies and puts them in its own chrome profile (the "ai browser"). this runs headless in the background, nothing pops up
-3. when a script needs the browser, run `syncme.py open`. the ai browser opens as normal chrome with your logins already in it and prints a cdp url to connect to
+3. when a script needs the browser, run `npx -y syncme-mcp open`. the ai browser opens as normal chrome with your logins already in it and prints a cdp url to connect to
 
 it only copies cookies for sites you said yes to. no passwords, no other sites. syncme never touches your real chrome profile.
 
@@ -14,43 +14,54 @@ there's also a setting to re-copy all your saved sites every time the ai browser
 
 ## setup
 
-needs chrome, python 3 and playwright (`pip install playwright`). works on mac and windows.
+needs chrome and node 20 or newer. works on mac and windows.
+
+there's nothing to install: the extension talks to the bridge over a websocket on 127.0.0.1, and any command starts the bridge itself.
 
 1. install the extension (chrome web store, or load this folder unpacked from `chrome://extensions` with developer mode on)
-2. clone this repo and run `python3 syncme.py install`. this registers the local bridge the extension talks to
-3. reload the extension
+2. click the syncme icon and use one of the connect buttons, or run `npx -y syncme-mcp setup` to wire up claude code, codex, cursor, windsurf and claude desktop
 
 ## commands
 
 ```
-python3 syncme.py open                       # start the ai browser, prints {"cdp": "http://127.0.0.1:<port>"}
-python3 syncme.py sync https://example.com   # copy one site, asks you in chrome first if it's not saved yet
-python3 syncme.py stop                       # close the ai browser
-python3 syncme.py shutdown                   # close it and stop the bridge
+npx -y syncme-mcp open                       # start the ai browser, prints {"cdp": "http://127.0.0.1:<port>"}
+npx -y syncme-mcp sync https://example.com   # copy one site, asks you in chrome first if it's not saved yet
+npx -y syncme-mcp stop                       # close the ai browser
+npx -y syncme-mcp shutdown                   # close it and stop the bridge
+npx -y syncme-mcp setup                      # add the mcp server to the ai apps you have installed
+npx -y syncme-mcp unpair                     # forget the paired extension, for when you reinstall it
+npx -y syncme-mcp pack                       # build syncme.zip for the web store
 ```
 
 connecting from playwright:
 
-```python
-from playwright.sync_api import sync_playwright
-import json, subprocess
+```js
+import {chromium} from 'playwright-core';
+import {execFileSync} from 'node:child_process';
 
-cdp = json.loads(subprocess.check_output(['python3', 'syncme.py', 'open']))['cdp']
-with sync_playwright() as pw:
-    page = pw.chromium.connect_over_cdp(cdp).contexts[0].new_page()
-    page.goto('https://example.com')
+const {cdp} = JSON.parse(execFileSync('npx', ['-y', 'syncme-mcp', 'open']));
+const browser = await chromium.connectOverCDP(cdp);
+await (await browser.contexts()[0].newPage()).goto('https://example.com');
 ```
 
 ## mcp
 
 you can also hook it up as an mcp server so your ai can ask for a site itself. it calls `copy_site` with something like `https://github.com`, you get a popup in chrome asking if it can have that login, and if you say yes it copies it and gets back the cdp url. there's also `open_browser` and `close_browser`.
 
+```
+claude mcp add --scope user syncme -- npx -y syncme-mcp
+codex mcp add syncme -- npx -y syncme-mcp
+npx -y syncme-mcp setup   # does both of the above, plus the json configs
+```
+
+or by hand:
+
 ```json
 {
   "mcpServers": {
     "syncme": {
-      "command": "python3",
-      "args": ["/path/to/syncme/syncme.py", "mcp"]
+      "command": "npx",
+      "args": ["-y", "syncme-mcp"]
     }
   }
 }
@@ -60,9 +71,10 @@ keep chrome open with the extension for it to work, since syncme takes the cooki
 
 ## notes
 
-- the ai browser profile lives in `~/Library/Application Support/syncme` on mac and `%LOCALAPPDATA%\syncme` on windows
+- the ai browser profile lives in `~/Library/Application Support/syncme` on mac, `%LOCALAPPDATA%\syncme` on windows and `~/.local/state/syncme` on linux
 - removing a site from the list stops future copies, but the ai browser keeps cookies it already has
-- the bridge only listens on 127.0.0.1 and only takes requests from the extension or from a local token only your user can read
+- the extension and syncme pair the first time they connect and check each other after that, so other accounts on your computer can't pose as either one
+- the bridge listens only on `127.0.0.1:47621`, only accepts a websocket whose origin is this extension, and only takes commands from a local token only your user can read
 
 ## license
 
