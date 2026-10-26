@@ -267,7 +267,7 @@ def serve():
                             send(s, {'error': 'Bridge already connected'}); continue
                         send(s, {'ok': True})
                         bridge, s = s, None
-                        bridge.settimeout(20)
+                        bridge.settimeout(120)
                     elif op in ('sync', 'open'):
                         phase = 'origin'
                         values = [request.get('origin')] if op == 'sync' else []
@@ -384,30 +384,90 @@ def pack():
     print(json.dumps({'packed': str(ROOT / 'syncme.zip')}))
 
 
+def request(message):
+    s = start_server(message['op'] in ('sync', 'open'))
+    if s is None:
+        return {'ok': True}
+    with s:
+        s.settimeout(150)
+        send(s, message)
+        return receive(s)
+
+
+def mcp():
+    tools = [
+        {'name': 'copy_site', 'description': "Copy the user's login cookies for one site (like https://github.com) from their Chrome into the AI browser, then return the AI browser's CDP url. If the site isn't saved yet, the user gets asked in Chrome first.",
+         'inputSchema': {'type': 'object', 'properties': {'site': {'type': 'string', 'description': 'exact origin, like https://github.com'}}, 'required': ['site']}},
+        {'name': 'open_browser', 'description': "Start the AI browser with the user's saved logins and return its CDP url. Connect with Playwright connect_over_cdp or any CDP client.",
+         'inputSchema': {'type': 'object', 'properties': {}}},
+        {'name': 'close_browser', 'description': 'Close the AI browser.', 'inputSchema': {'type': 'object', 'properties': {}}},
+    ]
+    versions = ['2025-06-18', '2025-03-26', '2024-11-05']
+    names = [tool['name'] for tool in tools]
+    for line in sys.stdin:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            print(json.dumps({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}), flush=True)
+            continue
+        if not isinstance(message, dict) or 'id' not in message:
+            continue
+        method = message.get('method')
+        params = message.get('params') if isinstance(message.get('params'), dict) else {}
+        arguments = params.get('arguments') if isinstance(params.get('arguments'), dict) else {}
+        name = params.get('name')
+        if method == 'tools/call' and name not in names:
+            print(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'error': {'code': -32602, 'message': 'Unknown tool'}}), flush=True)
+            continue
+        if method == 'initialize':
+            requested = params.get('protocolVersion')
+            result = {'protocolVersion': requested if requested in versions else versions[0], 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'syncme', 'version': MANIFEST['version']}}
+        elif method == 'tools/list':
+            result = {'tools': tools}
+        elif method == 'tools/call':
+            try:
+                if name == 'copy_site':
+                    origin(arguments.get('site'))
+                    response = request({'op': 'sync', 'origin': arguments['site']})
+                elif name == 'open_browser':
+                    response = request({'op': 'open'})
+                else:
+                    response = request({'op': 'stop'})
+            except (ValueError, OSError, EOFError):
+                response = {'error': 'syncme bridge unavailable or site invalid'}
+            if response.get('error'):
+                text = 'Failed: ' + response['error'] + '. The site must be an exact origin like https://github.com, Chrome must be open with the syncme extension, and the user must allow the site.'
+            elif name == 'close_browser':
+                text = 'AI browser closed.'
+            else:
+                text = json.dumps({'cdp': response['cdp'], 'copied_cookies': response['count']})
+            result = {'content': [{'type': 'text', 'text': text}], 'isError': bool(response.get('error'))}
+        elif method == 'ping':
+            result = {}
+        else:
+            print(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'error': {'code': -32601, 'message': 'Method not found'}}), flush=True)
+            continue
+        print(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'result': result}), flush=True)
+
+
 def main():
     command = sys.argv[1] if len(sys.argv) > 1 else ''
     if command == 'native': native()
     elif command == 'serve': serve()
     elif command == 'install': install()
     elif command == 'pack': pack()
+    elif command == 'mcp': mcp()
     elif command in ('sync', 'open', 'stop', 'shutdown'):
         if len(sys.argv) != (3 if command == 'sync' else 2):
             raise ValueError('Usage: syncme.py sync https://example.com | open | stop | shutdown | install')
-        request = {'op': command}
+        message = {'op': command}
         if command == 'sync':
-            origin(sys.argv[2]); request['origin'] = sys.argv[2]
-        s = start_server(command in ('sync', 'open'))
-        if s is None:
-            print(json.dumps({'ok': True}))
-            return
-        with s:
-            s.settimeout(120)
-            send(s, request)
-            response = receive(s)
+            origin(sys.argv[2]); message['origin'] = sys.argv[2]
+        response = request(message)
         print(json.dumps(response))
         if response.get('error'): sys.exit(1)
     else:
-        raise ValueError('Usage: syncme.py install | sync https://example.com | open | stop | shutdown | pack')
+        raise ValueError('Usage: syncme.py install | sync https://example.com | open | stop | shutdown | pack | mcp')
 
 
 if __name__ == '__main__':
