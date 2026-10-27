@@ -6,6 +6,16 @@
   "bin": {
     "syncme-mcp": "syncme.js"
   },
+  "files": [
+    "syncme.js",
+    "manifest.json",
+    "background.js",
+    "approve.html",
+    "approve.js",
+    "options.html",
+    "options.js",
+    "icons"
+  ],
   "engines": {
     "node": ">=20"
   },
