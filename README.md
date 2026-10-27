@@ -8,7 +8,7 @@ syncme comes in two parts: the [chrome extension](https://chromewebstore.google.
 
 1. when you're on a site you want, click the syncme icon and it asks if you want to copy it over
 2. syncme grabs that site's cookies and puts them in its own chrome profile (the "ai browser"). this runs headless in the background, nothing pops up
-3. when a script needs the browser, run `npx -y syncme-mcp open`. the ai browser opens as normal chrome with your logins already in it and prints a cdp url to connect to
+3. when a script needs the browser, run `npx -y syncme-mcp@latest open`. the ai browser opens as normal chrome with your logins already in it and prints a cdp url to connect to
 
 it only copies cookies for sites you said yes to. no passwords, no other sites. syncme never touches your real chrome profile.
 
@@ -21,18 +21,18 @@ needs chrome and node 20 or newer. works on mac and windows.
 there's nothing to install: the extension talks to the bridge over a websocket on 127.0.0.1, and any command starts the bridge itself.
 
 1. install the extension from the [chrome web store](https://chromewebstore.google.com/detail/dcgmgkdgmbjgnchjdmokimppnhfinpfp), or load this folder unpacked from `chrome://extensions` with developer mode on
-2. click the syncme icon, hit the gear, and use one of the connect buttons, or run `npx -y syncme-mcp setup` to wire up every ai app it finds: claude code, claude desktop, codex, hermes, cursor, windsurf, vs code, cline, roo code, copilot cli, gemini cli, qwen code, kiro, opencode and amp
+2. click the syncme icon, hit the gear, and use one of the connect buttons, or run `npx -y syncme-mcp@latest setup` to wire up every ai app it finds: claude code, claude desktop, codex, hermes, cursor, windsurf, vs code, cline, roo code, copilot cli, gemini cli, qwen code, kiro, opencode and amp
 
 ## commands
 
 ```
-npx -y syncme-mcp open                       # start the ai browser, prints {"cdp": "http://127.0.0.1:<port>"}
-npx -y syncme-mcp sync https://example.com   # copy one site, asks you in chrome first unless it's saved or yolo is on
-npx -y syncme-mcp stop                       # close the ai browser
-npx -y syncme-mcp shutdown                   # close it and stop the bridge
-npx -y syncme-mcp setup                      # add the mcp server to the ai apps you have installed
-npx -y syncme-mcp unpair                     # forget the paired extension, for when you reinstall it
-npx -y syncme-mcp pack                       # build syncme.zip for the web store
+npx -y syncme-mcp@latest open                       # start the ai browser, prints {"cdp": "http://127.0.0.1:<port>"}
+npx -y syncme-mcp@latest sync https://example.com   # copy one site, asks you in chrome first unless it's saved or yolo is on
+npx -y syncme-mcp@latest stop                       # close the ai browser
+npx -y syncme-mcp@latest shutdown                   # close it and stop the bridge
+npx -y syncme-mcp@latest setup                      # add the mcp server to the ai apps you have installed
+npx -y syncme-mcp@latest unpair                     # forget the paired extension, for when you reinstall it
+npx -y syncme-mcp@latest pack                       # build syncme.zip for the web store
 ```
 
 connecting from playwright:
@@ -41,7 +41,7 @@ connecting from playwright:
 import {chromium} from 'playwright-core';
 import {execFileSync} from 'node:child_process';
 
-const {cdp} = JSON.parse(execFileSync('npx', ['-y', 'syncme-mcp', 'open']));
+const {cdp} = JSON.parse(execFileSync('npx', ['-y', 'syncme-mcp@latest', 'open']));
 const browser = await chromium.connectOverCDP(cdp);
 await (await browser.contexts()[0].newPage()).goto('https://example.com');
 ```
@@ -51,9 +51,9 @@ await (await browser.contexts()[0].newPage()).goto('https://example.com');
 you can also hook it up as an mcp server so your ai can ask for a site itself. it calls `copy_site` with something like `https://github.com`, you get a popup in chrome asking if it can have that login, and if you say yes it copies it and gets back the cdp url. turn on yolo mode in the syncme options (the gear in the popup) to skip that popup and let your ai copy any site it asks for. there's also `open_browser` and `close_browser`.
 
 ```
-claude mcp add --scope user syncme -- npx -y syncme-mcp
-codex mcp add syncme -- npx -y syncme-mcp
-npx -y syncme-mcp setup   # does both of the above, plus every other app it finds
+claude mcp add --scope user syncme -- npx -y syncme-mcp@latest
+codex mcp add syncme -- npx -y syncme-mcp@latest
+npx -y syncme-mcp@latest setup   # does both of the above, plus every other app it finds
 ```
 
 or by hand:
@@ -63,7 +63,7 @@ or by hand:
   "mcpServers": {
     "syncme": {
       "command": "npx",
-      "args": ["-y", "syncme-mcp"]
+      "args": ["-y", "syncme-mcp@latest"]
     }
   }
 }

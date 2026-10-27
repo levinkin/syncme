@@ -19,7 +19,7 @@ const PORT = 47621;
 const LIMIT = 1024 * 1024;
 const CLIENT_URL = 'ws://127.0.0.1:' + PORT + '/client';
 const BRIDGE_URL = 'ws://127.0.0.1:' + PORT + '/';
-const SERVER = {command: 'npx', args: ['-y', 'syncme-mcp']};
+const SERVER = {command: 'npx', args: ['-y', 'syncme-mcp@latest']};
 const SAME_SITE = {no_restriction: 'None', lax: 'Lax', strict: 'Strict', unspecified: 'Lax'};
 
 const rejected = phase => Object.assign(Error('Rejected'), {phase});
@@ -433,9 +433,9 @@ function setup() {
     }
   }
   for (const [name, args, input] of [
-    ['claude', ['mcp', 'add', '--scope', 'user', 'syncme', '--', 'npx', '-y', 'syncme-mcp']],
-    ['codex', ['mcp', 'add', 'syncme', '--', 'npx', '-y', 'syncme-mcp']],
-    ['hermes', ['mcp', 'add', 'syncme', '--command', 'npx', '--args', '-y', 'syncme-mcp'], 'y\n'],
+    ['claude', ['mcp', 'add', '--scope', 'user', 'syncme', '--', 'npx', '-y', 'syncme-mcp@latest']],
+    ['codex', ['mcp', 'add', 'syncme', '--', 'npx', '-y', 'syncme-mcp@latest']],
+    ['hermes', ['mcp', 'add', 'syncme', '--command', 'npx', '--args', '-y', 'syncme-mcp@latest'], 'y\n'],
     ['code', ['--add-mcp', JSON.stringify({name: 'syncme', ...SERVER})]],
   ]) {
     const result = spawnSync(name, args, {input: input || '', stdio: ['pipe', 'ignore', 'ignore'], timeout: 120000});
