@@ -21,7 +21,7 @@ needs chrome and node 20 or newer. works on mac and windows.
 there's nothing to install: the extension talks to the bridge over a websocket on 127.0.0.1, and any command starts the bridge itself.
 
 1. install the extension from the [chrome web store](https://chromewebstore.google.com/detail/dcgmgkdgmbjgnchjdmokimppnhfinpfp), or load this folder unpacked from `chrome://extensions` with developer mode on
-2. click the syncme icon, hit the gear, and use one of the connect buttons, or run `npx -y syncme-mcp setup` to wire up claude code, codex, cursor, windsurf and claude desktop
+2. click the syncme icon, hit the gear, and use one of the connect buttons, or run `npx -y syncme-mcp setup` to wire up every ai app it finds: claude code, claude desktop, codex, hermes, cursor, windsurf, vs code, cline, roo code, copilot cli, gemini cli, qwen code, kiro, opencode and amp
 
 ## commands
 
@@ -53,7 +53,7 @@ you can also hook it up as an mcp server so your ai can ask for a site itself. i
 ```
 claude mcp add --scope user syncme -- npx -y syncme-mcp
 codex mcp add syncme -- npx -y syncme-mcp
-npx -y syncme-mcp setup   # does both of the above, plus the json configs
+npx -y syncme-mcp setup   # does both of the above, plus every other app it finds
 ```
 
 or by hand:

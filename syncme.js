@@ -403,23 +403,42 @@ function pack() {
 }
 
 function setup() {
-  const claude = process.platform === 'win32' ? join(process.env.APPDATA || homedir(), 'Claude', 'claude_desktop_config.json') : join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+  const home = homedir();
+  const appData = process.platform === 'win32' ? process.env.APPDATA || join(home, 'AppData', 'Roaming') : join(home, 'Library', 'Application Support');
+  const vscode = join(appData, 'Code', 'User');
   const configured = [];
   const failed = [];
-  for (const [name, file] of [['claude desktop', claude], ['cursor', join(homedir(), '.cursor', 'mcp.json')], ['windsurf', join(homedir(), '.codeium', 'windsurf', 'mcp_config.json')]]) {
+  for (const [name, file, key, server] of [
+    ['claude desktop', join(appData, 'Claude', 'claude_desktop_config.json'), 'mcpServers', SERVER],
+    ['cursor', join(home, '.cursor', 'mcp.json'), 'mcpServers', SERVER],
+    ['windsurf', join(home, '.codeium', 'windsurf', 'mcp_config.json'), 'mcpServers', SERVER],
+    ['gemini', join(home, '.gemini', 'settings.json'), 'mcpServers', SERVER],
+    ['qwen', join(home, '.qwen', 'settings.json'), 'mcpServers', SERVER],
+    ['kiro', join(home, '.kiro', 'settings', 'mcp.json'), 'mcpServers', SERVER],
+    ['copilot cli', join(home, '.copilot', 'mcp-config.json'), 'mcpServers', {type: 'local', ...SERVER, tools: ['*']}],
+    ['opencode', join(home, '.config', 'opencode', 'opencode.json'), 'mcp', {type: 'local', command: [SERVER.command, ...SERVER.args], enabled: true}],
+    ['amp', join(home, '.config', 'amp', 'settings.json'), 'amp.mcpServers', SERVER],
+    ['cline', join(vscode, 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'), 'mcpServers', SERVER],
+    ['roo code', join(vscode, 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'mcp_settings.json'), 'mcpServers', SERVER],
+  ]) {
     if (!existsSync(dirname(file))) continue;
     try {
       const existing = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
       if (!existing || typeof existing !== 'object' || Array.isArray(existing)) throw Error('Unreadable config');
-      const servers = existing.mcpServers && typeof existing.mcpServers === 'object' && !Array.isArray(existing.mcpServers) ? existing.mcpServers : {};
-      writeFileSync(file, JSON.stringify({...existing, mcpServers: {...servers, syncme: SERVER}}, null, 2) + '\n');
+      const servers = existing[key] && typeof existing[key] === 'object' && !Array.isArray(existing[key]) ? existing[key] : {};
+      writeFileSync(file, JSON.stringify({...existing, [key]: {...servers, syncme: server}}, null, 2) + '\n');
       configured.push(name);
     } catch {
       failed.push(file);
     }
   }
-  for (const [name, args] of [['claude', ['mcp', 'add', '--scope', 'user', 'syncme', '--', 'npx', '-y', 'syncme-mcp']], ['codex', ['mcp', 'add', 'syncme', '--', 'npx', '-y', 'syncme-mcp']]]) {
-    const result = spawnSync(name, args, {stdio: 'ignore'});
+  for (const [name, args, input] of [
+    ['claude', ['mcp', 'add', '--scope', 'user', 'syncme', '--', 'npx', '-y', 'syncme-mcp']],
+    ['codex', ['mcp', 'add', 'syncme', '--', 'npx', '-y', 'syncme-mcp']],
+    ['hermes', ['mcp', 'add', 'syncme', '--command', 'npx', '--args', '-y', 'syncme-mcp'], 'y\n'],
+    ['code', ['--add-mcp', JSON.stringify({name: 'syncme', ...SERVER})]],
+  ]) {
+    const result = spawnSync(name, args, {input: input || '', stdio: ['pipe', 'ignore', 'ignore'], timeout: 120000});
     if (result.status === 0) configured.push(name + ' cli');
     else if (!result.error || result.error.code !== 'ENOENT') failed.push(name + ' cli');
   }
