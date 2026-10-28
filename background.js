@@ -1,4 +1,7 @@
+importScripts('tldts.js');
 let socket;
+const domain = u => tldts.getDomain(u.hostname, {allowPrivateDomains: true});
+const scope = u => domain(u) ? u.protocol + '//' + domain(u) : u.origin;
 function origin(value) {
   const u = new URL(value);
   if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.pathname !== '/' || u.search || u.hash || u.origin !== value) throw Error('Enter an exact http(s) origin without a trailing slash.');
@@ -88,15 +91,15 @@ function connect() {
     try {
       if (message.op !== 'sync' || typeof message.id !== 'string') throw Error('Invalid request');
       const u = origin(message.origin);
-      if (!approved.includes(u.origin)) {
-        if (!yolo && !await allow(u.origin)) throw Error('Origin not approved');
+      const site = scope(u);
+      if (!approved.includes(site)) {
+        if (!yolo && !await allow(site)) throw Error('Origin not approved');
         const {approved: now = []} = await chrome.storage.local.get('approved');
-        await chrome.storage.local.set({approved: [...new Set([...now, u.origin])]});
+        await chrome.storage.local.set({approved: [...new Set([...now, site])]});
       }
       stage = 'cookies';
-      const found = new Map();
-      for (const c of [...await chrome.cookies.getAll({domain: u.hostname}), ...await chrome.cookies.getAll({url: u.origin + '/'})]) found.set(c.name + ';' + c.domain + ';' + c.path, c);
-      const cookies = [...found.values()].filter(c => (c.hostOnly ? c.domain === u.hostname : ('.' + u.hostname).endsWith(c.domain)) && !c.partitionKey && (!c.secure || u.protocol === 'https:'));
+      const found = await chrome.cookies.getAll(domain(u) ? {domain: domain(u)} : {url: u.origin + '/'});
+      const cookies = found.filter(c => !c.partitionKey && (!c.secure || u.protocol === 'https:'));
       seal(ws, {id: message.id, origin: u.origin, cookies});
     } catch (_) { seal(ws, {id: message.id, error: stage === 'cookies' ? 'Cookie API refused' : 'Origin unavailable or not approved'}); }
   };
@@ -114,7 +117,7 @@ function connect() {
 async function copy(value) {
   const u = origin(value);
   const {approved = []} = await chrome.storage.local.get('approved');
-  await chrome.storage.local.set({approved: [...new Set([...approved, u.origin])]});
+  await chrome.storage.local.set({approved: [...new Set([...approved, scope(u)])]});
   connect();
   if (socket?.readyState !== WebSocket.OPEN || !socket.isVerified()) return {error: 'Not connected'};
   const id = crypto.randomUUID();

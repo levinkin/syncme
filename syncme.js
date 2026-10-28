@@ -22,6 +22,7 @@ const BRIDGE_URL = 'ws://127.0.0.1:' + PORT + '/';
 const SERVER = {command: 'npx', args: ['-y', 'syncme-mcp@latest']};
 const SAME_SITE = {no_restriction: 'None', lax: 'Lax', strict: 'Strict', unspecified: 'Lax'};
 
+const HOST = /^[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?(?:\.[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?)*$/;
 const rejected = phase => Object.assign(Error('Rejected'), {phase});
 const hex64 = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
 const proof = (token, purpose) => createHmac('sha256', token).update(purpose).digest('hex');
@@ -142,13 +143,18 @@ function origin(value) {
     throw rejected('origin');
   }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash || url.origin !== value) throw rejected('origin');
-  if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(url.hostname) || url.hostname.includes('..')) throw rejected('origin');
+  if (!HOST.test(url.hostname)) throw rejected('origin');
   return url;
+}
+
+function covers(site, domain) {
+  const base = getDomain(site.hostname, {allowPrivateDomains: true});
+  const host = domain.replace(/^\./, '');
+  return base ? HOST.test(host) && (host === base || host.endsWith('.' + base)) : domain === site.hostname;
 }
 
 function cookiesFor(site, cookies) {
   if (!Array.isArray(cookies) || cookies.length > 3000) throw rejected('cookies');
-  const registrable = getDomain(site.hostname, {allowPrivateDomains: true});
   const result = [];
   for (const c of cookies) {
     if (!c || typeof c !== 'object' || typeof c.domain !== 'string' || c.partitionKey) throw rejected('cookies');
@@ -156,10 +162,10 @@ function cookiesFor(site, cookies) {
       if (typeof c[field] !== 'string' || c[field].length > 16384) throw rejected('cookies');
     }
     if (!c.path.startsWith('/') || ['secure', 'httpOnly', 'hostOnly', 'session'].some(field => typeof c[field] !== 'boolean')) throw rejected('cookies');
-    if (c.hostOnly ? c.domain !== site.hostname : !registrable || !c.domain.startsWith('.') || c.domain.length <= registrable.length || !('.' + site.hostname).endsWith(c.domain)) throw rejected('cookies');
+    if (c.hostOnly === c.domain.startsWith('.') || !covers(site, c.domain)) throw rejected('cookies');
     if (c.secure && site.protocol !== 'https:') throw rejected('cookies');
     const item = {name: c.name, value: c.value, path: c.path, secure: c.secure, httpOnly: c.httpOnly};
-    item.domain = c.hostOnly ? site.hostname : c.domain;
+    item.domain = c.domain;
     if (!Object.hasOwn(SAME_SITE, c.sameSite)) throw rejected('cookies');
     item.sameSite = SAME_SITE[c.sameSite];
     if (!c.session) {
@@ -313,7 +319,7 @@ async function serve() {
         if (response.origin !== value || response.error) throw rejected('bridge');
         const cookies = cookiesFor(site, response.cookies);
         for (const cookie of await context.cookies()) {
-          if ((cookie.domain === site.hostname || cookie.domain.startsWith('.') && ('.' + site.hostname).endsWith(cookie.domain)) && (site.protocol === 'https:' || !cookie.secure)) await context.clearCookies({name: cookie.name, domain: cookie.domain, path: cookie.path});
+          if (covers(site, cookie.domain) && (site.protocol === 'https:' || !cookie.secure)) await context.clearCookies({name: cookie.name, domain: cookie.domain, path: cookie.path});
         }
         await context.addCookies(cookies);
         count += cookies.length;
@@ -452,12 +458,12 @@ function pack() {
   try {
     const {key, ...store} = MANIFEST;
     writeFileSync(join(stage, 'manifest.json'), JSON.stringify(store, null, 2));
-    for (const name of ['background.js', 'approve.html', 'approve.js', 'options.html', 'options.js']) copyFileSync(join(ROOT, name), join(stage, name));
+    for (const name of ['background.js', 'tldts.js', 'approve.html', 'approve.js', 'options.html', 'options.js']) copyFileSync(join(ROOT, name), join(stage, name));
     cpSync(join(ROOT, 'icons'), join(stage, 'icons'), {recursive: true});
     rmSync(zip, {force: true});
     const result = process.platform === 'win32'
       ? spawnSync('powershell', ['-NoProfile', '-Command', `Compress-Archive -Path '${join(stage, '*')}' -DestinationPath '${zip}' -Force`], {stdio: 'ignore'})
-      : spawnSync('zip', ['-r', '-X', '-q', zip, 'manifest.json', 'background.js', 'approve.html', 'approve.js', 'options.html', 'options.js', 'icons'], {cwd: stage, stdio: 'ignore'});
+      : spawnSync('zip', ['-r', '-X', '-q', zip, 'manifest.json', 'background.js', 'tldts.js', 'approve.html', 'approve.js', 'options.html', 'options.js', 'icons'], {cwd: stage, stdio: 'ignore'});
     if (result.status !== 0) throw Error('Pack failed');
   } finally {
     rmSync(stage, {recursive: true, force: true});

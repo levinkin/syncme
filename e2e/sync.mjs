@@ -19,7 +19,7 @@ const app = join(work, 'app');
 const home = join(work, 'home');
 const state = process.platform === 'win32' ? join(home, 'AppData', 'Local', 'syncme') : process.platform === 'darwin' ? join(home, 'Library', 'Application Support', 'syncme') : join(home, '.local', 'state', 'syncme');
 const env = {...process.env, HOME: home, USERPROFILE: home, LOCALAPPDATA: join(home, 'AppData', 'Local')};
-for (const file of ['syncme.js', 'manifest.json', 'background.js', 'approve.html', 'approve.js', 'options.html', 'options.js', 'icons']) cpSync(join(root, file), join(app, file), {recursive: true});
+for (const file of ['syncme.js', 'manifest.json', 'background.js', 'tldts.js', 'approve.html', 'approve.js', 'options.html', 'options.js', 'icons']) cpSync(join(root, file), join(app, file), {recursive: true});
 for (const file of ['syncme.js', 'background.js']) writeFileSync(join(app, file), readFileSync(join(app, file), 'utf8').replaceAll('47621', port));
 symlinkSync(join(root, 'node_modules'), join(app, 'node_modules'), 'junction');
 
@@ -93,7 +93,7 @@ try {
     args: ['--disable-extensions-except=' + app, '--load-extension=' + app, '--remote-debugging-port=0'],
   });
   const expires = Math.floor(Date.now() / 1000) + 3600;
-  const seeded = [['gh_host', 'github.com'], ['gh_parent', '.github.com'], ['gist_only', 'gist.github.com'], ['org_host', 'sub.example.org'], ['org_parent', '.example.org'], ['org_sibling', 'other.example.org'], ['bank_secret', 'bank.test']];
+  const seeded = [['gh_host', 'github.com'], ['gh_parent', '.github.com'], ['gist_only', 'gist.github.com'], ['org_host', 'sub.example.org'], ['org_parent', '.example.org'], ['org_sibling', 'other.example.org'], ['org_underscore', 'intranet_qa.example.org'], ['bank_secret', 'bank.test']];
   await user.addCookies(seeded.map(([name, domain]) => ({name, value: name + '-value', domain, path: '/', secure: true, httpOnly: true, sameSite: 'Lax', expires})));
   const worker = user.serviceWorkers()[0] || await user.waitForEvent('serviceworker');
   await worker.evaluate(() => {
@@ -104,7 +104,7 @@ try {
       readDomains.push(...found.map(c => c.domain));
       return found;
     };
-    return chrome.storage.local.set({approved: ['https://github.com', 'https://sub.example.org']});
+    return chrome.storage.local.set({approved: ['https://github.com', 'https://example.org']});
   });
   const devtoolsPort = Number(readFileSync(join(work, 'user-chrome', 'DevToolsActivePort'), 'utf8').split('\n')[0]);
   const targets = await (await fetch('http://127.0.0.1:' + devtoolsPort + '/json/list')).json();
@@ -119,11 +119,13 @@ try {
   await worker.evaluate(() => connect());
   for (let i = 0; i < 100 && !(await worker.evaluate(() => chrome.storage.session.get('connected'))).connected; i++) await sleep(100);
 
-  user.on('page', page => page.url().includes('approve.html') && page.close());
-  const result = await request({op: 'sync', origins: ['https://github.com', 'https://sub.example.org', 'https://denied.test', 'https://github.com']});
+  const asked = [];
+  user.on('page', page => page.url().includes('approve.html') && (asked.push(new URL(page.url()).searchParams.get('site')), page.close()));
+  const result = await request({op: 'sync', origins: ['https://github.com', 'https://sub.example.org', 'https://www.denied.test', 'https://github.com']});
   assert.equal(result.ok, true, JSON.stringify(result));
-  assert.equal(result.count, 4);
-  assert.deepEqual(result.failed, ['https://denied.test']);
+  assert.equal(result.count, 7);
+  assert.deepEqual(result.failed, ['https://www.denied.test']);
+  assert.deepEqual(asked, ['https://denied.test']);
   const mixed = await request({op: 'sync', origins: ['not-an-origin', 'https://github.com']});
   assert.equal(mixed.ok, true, JSON.stringify(mixed));
   assert.deepEqual(mixed.failed, ['not-an-origin']);
@@ -134,7 +136,7 @@ try {
   assert.match(profiles[0], /^browser-/);
   ai = await chromium.connectOverCDP(result.cdp);
   const copied = (await ai.contexts()[0].cookies()).map(c => c.name).sort();
-  assert.deepEqual(copied, ['gh_host', 'gh_parent', 'org_host', 'org_parent']);
+  assert.deepEqual(copied, ['gh_host', 'gh_parent', 'gist_only', 'org_host', 'org_parent', 'org_sibling', 'org_underscore']);
   const read = await worker.evaluate(() => readDomains);
   assert.ok(!read.some(domain => domain.endsWith('bank.test')), 'extension read unrelated cookies: ' + read);
   await ai.close();
@@ -146,7 +148,7 @@ try {
   mcp.kill();
   assert.equal(tool.isError, false);
   const text = JSON.parse(tool.content[0].text);
-  assert.equal(text.copied_cookies, 2);
+  assert.equal(text.copied_cookies, 3);
   assert.deepEqual(text.not_copied, ['https://denied.test']);
 
   await sleep(200);
@@ -181,7 +183,7 @@ try {
   for (let i = 0; i < 20; i++) await request({op: 'sync', origins: ['https://github.com', 'https://sub.example.org']});
   const before = await heap(devtools);
   const started = Date.now();
-  for (let i = 0; i < 500; i++) assert.equal((await request({op: 'sync', origins: ['https://github.com', 'https://sub.example.org']})).count, 4);
+  for (let i = 0; i < 500; i++) assert.equal((await request({op: 'sync', origins: ['https://github.com', 'https://sub.example.org']})).count, 7);
   const seconds = (Date.now() - started) / 1000;
   const after = await heap(devtools);
   devtools.close();

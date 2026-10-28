@@ -4,7 +4,9 @@ const copyButton = document.querySelector('#copy');
 let site;
 const requested = new URLSearchParams(location.search).get('site');
 if (requested) {
-  question.textContent = `Your AI needs your ${new URL(requested).host} login to continue. Copy it?`;
+  const u = new URL(requested);
+  const whole = tldts.getDomain(u.hostname, {allowPrivateDomains: true}) === u.hostname;
+  question.textContent = `Your AI needs your ${u.host} login${whole ? ', including every subdomain' : ''}. Copy it?`;
   document.querySelector('#options').hidden = true;
   const deny = document.querySelector('#deny');
   deny.hidden = false;
@@ -15,7 +17,8 @@ if (requested) {
     const u = tab?.url ? new URL(tab.url) : null;
     if (u && ['http:', 'https:'].includes(u.protocol)) {
       site = u.origin;
-      question.textContent = `Copy ${u.host} to your AI browser?`;
+      const whole = tldts.getDomain(u.hostname, {allowPrivateDomains: true});
+      question.textContent = `Copy ${whole ? whole + ' and every subdomain' : u.host} to your AI browser?`;
     } else {
       question.textContent = 'Open a website to copy it.';
       copyButton.hidden = true;
