@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {spawn, spawnSync} from 'node:child_process';
-import {createHash, createHmac, randomBytes, timingSafeEqual} from 'node:crypto';
-import {chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {createCipheriv, createDecipheriv, createHash, createHmac, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, randomBytes, timingSafeEqual} from 'node:crypto';
+import {chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
 import {homedir, tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {createInterface} from 'node:readline';
@@ -50,6 +50,38 @@ function send(socket, value) {
   if (!data.length || Buffer.byteLength(data) > LIMIT) throw Error('Message too large');
   if (socket.readyState !== WebSocket.OPEN) throw Error('Disconnected');
   socket.send(data);
+}
+
+function iv(n) {
+  const value = Buffer.alloc(12);
+  value.writeBigUInt64BE(BigInt(n), 4);
+  return value;
+}
+
+function wipe(dir) {
+  if (!dir) return;
+  try {
+    rmSync(dir, {recursive: true, force: true, maxRetries: 10, retryDelay: 200});
+  } catch {}
+}
+
+function seal(socket, value) {
+  const cipher = createCipheriv('aes-256-gcm', socket.out.key, iv(socket.out.n));
+  const data = Buffer.concat([cipher.update(JSON.stringify(value)), cipher.final(), cipher.getAuthTag()]).toString('base64');
+  send(socket, {op: 'enc', n: socket.out.n, data});
+  socket.out.n++;
+}
+
+function unseal(socket, frame) {
+  if (frame.op !== 'enc' || frame.n !== socket.in.n || typeof frame.data !== 'string') throw Error('Bad frame');
+  const data = Buffer.from(frame.data, 'base64');
+  if (data.length < 17) throw Error('Bad frame');
+  const decipher = createDecipheriv('aes-256-gcm', socket.in.key, iv(socket.in.n));
+  decipher.setAuthTag(data.subarray(-16));
+  const value = JSON.parse(Buffer.concat([decipher.update(data.subarray(0, -16)), decipher.final()]).toString());
+  socket.in.n++;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Bad frame');
+  return value;
 }
 
 function messages(socket) {
@@ -172,7 +204,7 @@ async function request(message) {
   const next = messages(socket);
   try {
     send(socket, message);
-    return await Promise.race([next(), new Promise(resolve => setTimeout(resolve, 150000, {error: 'Timed out'}).unref())]);
+    return await Promise.race([next(), new Promise(resolve => setTimeout(resolve, 150000 * (message.origins?.length || 1), {error: 'Timed out'}).unref())]);
   } finally {
     socket.close();
   }
@@ -190,11 +222,14 @@ async function serve() {
   const server = new WebSocketServer({host: '127.0.0.1', port: PORT, maxPayload: LIMIT, verifyClient: verify});
   server.on('error', () => process.exit(0));
   await new Promise(resolve => server.once('listening', resolve));
-  let bridge, context, endpoint;
+  for (const name of readdirSync(STATE)) if (name === 'browser' || name.startsWith('browser-')) wipe(join(STATE, name));
+  let bridge, context, endpoint, profile;
   let headless = false;
   const pending = new Map();
   let queue = Promise.resolve();
   const enqueue = task => (queue = queue.then(task, task).catch(() => {}));
+  process.on('exit', () => wipe(profile));
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => closeBrowser().finally(() => process.exit(0)));
 
   async function closeBrowser() {
     const current = context;
@@ -204,6 +239,8 @@ async function serve() {
         await current.close();
       } catch {}
     }
+    wipe(profile);
+    profile = undefined;
   }
 
   function ask(message) {
@@ -213,7 +250,7 @@ async function serve() {
       const timer = setTimeout(() => pending.delete(id) && reject(rejected('bridge')), 120000);
       pending.set(id, {resolve: value => (clearTimeout(timer), resolve(value)), reject: error => (clearTimeout(timer), reject(error))});
     });
-    send(bridge, {...message, id});
+    seal(bridge, {...message, id});
     return response;
   }
 
@@ -225,13 +262,12 @@ async function serve() {
   }
 
   async function copyIntoBrowser(values, fromExtension) {
-    for (const value of values) origin(value);
     if (values.length && !bridge) throw rejected('bridge');
     if (context) {
       try {
         await context.cookies('https://syncme.invalid');
       } catch {
-        context = endpoint = undefined;
+        await closeBrowser();
       }
     }
     let carried = [];
@@ -239,13 +275,25 @@ async function serve() {
       carried = await context.cookies();
       await context.close();
       context = endpoint = undefined;
+      wipe(profile);
+      profile = undefined;
     }
     if (!context) {
       headless = fromExtension;
-      const profile = join(STATE, 'browser');
-      mkdirSync(profile, {recursive: true, mode: 0o700});
-      rmSync(join(profile, 'DevToolsActivePort'), {force: true});
-      context = await chromium.launchPersistentContext(profile, {channel: 'chrome', headless, args: ['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0']});
+      profile = mkdtempSync(join(STATE, 'browser-'));
+      if (process.platform !== 'win32') chmodSync(profile, 0o700);
+      try {
+        context = await chromium.launchPersistentContext(profile, {channel: 'chrome', headless, args: ['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0']});
+      } catch (error) {
+        wipe(profile);
+        profile = undefined;
+        throw error;
+      }
+      const launched = context, dir = profile;
+      launched.once('close', () => {
+        if (context === launched) context = endpoint = profile = undefined;
+        wipe(dir);
+      });
       await context.addCookies(carried);
       const port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]);
       if (!(port > 0 && port < 65536)) throw Error('Invalid owned browser endpoint');
@@ -257,18 +305,23 @@ async function serve() {
       }
     }
     let count = 0;
+    const failed = [];
     for (const value of values) {
-      const site = origin(value);
-      const response = await ask({op: 'sync', origin: value});
-      if (response.origin !== value || response.error) throw rejected('bridge');
-      const cookies = cookiesFor(site, response.cookies);
-      for (const cookie of await context.cookies()) {
-        if ((cookie.domain === site.hostname || cookie.domain.startsWith('.') && ('.' + site.hostname).endsWith(cookie.domain)) && (site.protocol === 'https:' || !cookie.secure)) await context.clearCookies({name: cookie.name, domain: cookie.domain, path: cookie.path});
+      try {
+        const site = origin(value);
+        const response = await ask({op: 'sync', origin: value});
+        if (response.origin !== value || response.error) throw rejected('bridge');
+        const cookies = cookiesFor(site, response.cookies);
+        for (const cookie of await context.cookies()) {
+          if ((cookie.domain === site.hostname || cookie.domain.startsWith('.') && ('.' + site.hostname).endsWith(cookie.domain)) && (site.protocol === 'https:' || !cookie.secure)) await context.clearCookies({name: cookie.name, domain: cookie.domain, path: cookie.path});
+        }
+        await context.addCookies(cookies);
+        count += cookies.length;
+      } catch {
+        failed.push(value);
       }
-      await context.addCookies(cookies);
-      count += cookies.length;
     }
-    return count;
+    return {count, failed};
   }
 
   function bridgeMessage(socket, message) {
@@ -280,14 +333,15 @@ async function serve() {
     }
     if (message.op === 'copied' || message.op === 'ping') return;
     if (message.op !== 'copy' || typeof message.id !== 'string' || message.id.length > 64) return socket.close();
-    if (pending.size) return send(socket, {op: 'copied', id: message.id, error: 'Busy'});
+    if (pending.size) return seal(socket, {op: 'copied', id: message.id, error: 'Busy'});
     enqueue(async () => {
       const reply = {op: 'copied', id: message.id};
       try {
-        send(socket, {...reply, ok: true, cdp: endpoint, count: await copyIntoBrowser([message.origin], true)});
+        const {count, failed} = await copyIntoBrowser([message.origin], true);
+        seal(socket, failed.length ? {...reply, error: 'Request rejected'} : {...reply, ok: true, cdp: endpoint, count});
       } catch (error) {
         try {
-          send(socket, {...reply, error: error.phase ? 'Request rejected' : 'Owned browser operation failed', phase: error.phase});
+          seal(socket, {...reply, error: error.phase ? 'Request rejected' : 'Owned browser operation failed', phase: error.phase});
         } catch {}
       }
     });
@@ -300,7 +354,8 @@ async function serve() {
     bridge = undefined;
     if (current) current.close();
     server.close();
-    setTimeout(() => process.exit(0), 100);
+    closeBrowser().finally(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
   }
 
   async function client(socket, next) {
@@ -321,8 +376,10 @@ async function serve() {
     try {
       const op = message.op;
       if (op === 'sync' || op === 'open') {
-        const count = await copyIntoBrowser(op === 'sync' ? [message.origin] : [], false);
-        send(socket, {ok: true, cdp: endpoint, count});
+        if (op === 'sync' && (!Array.isArray(message.origins) || !message.origins.length || message.origins.length > 100)) throw rejected('origin');
+        const origins = op === 'sync' ? [...new Set(message.origins)] : [];
+        const {count, failed} = await copyIntoBrowser([...origins], false);
+        send(socket, origins.length && origins.every(site => failed.includes(site)) ? {error: 'Request rejected', failed} : {ok: true, cdp: endpoint, count, failed});
       } else if (op === 'stop' || op === 'shutdown') {
         await closeBrowser();
         send(socket, {ok: true});
@@ -348,12 +405,15 @@ async function serve() {
         const pairFile = join(STATE, 'pair');
         let secret = existsSync(pairFile) ? readFileSync(pairFile, 'utf8') : '';
         const nonce = randomBytes(32).toString('hex');
-        send(socket, {op: 'hello', nonce, paired: Boolean(secret)});
+        const pair = secret ? undefined : generateKeyPairSync('x25519');
+        send(socket, pair ? {op: 'hello', nonce, paired: false, key: Buffer.from(pair.publicKey.export({format: 'jwk'}).x, 'base64url').toString('base64')} : {op: 'hello', nonce, paired: true});
         let message = await next();
-        if (!secret) {
-          if (message.op !== 'pair' || !hex64(message.secret)) return socket.close();
-          writeFileSync(pairFile, message.secret, {flag: 'wx', mode: 0o600});
-          secret = message.secret;
+        if (pair) {
+          const key = typeof message.key === 'string' ? Buffer.from(message.key, 'base64') : Buffer.alloc(0);
+          if (message.op !== 'pair' || key.length !== 32 || key.toString('base64') !== message.key) return socket.close();
+          const shared = diffieHellman({privateKey: pair.privateKey, publicKey: createPublicKey({key: {kty: 'OKP', crv: 'X25519', x: key.toString('base64url')}, format: 'jwk'})});
+          secret = Buffer.from(hkdfSync('sha256', shared, Buffer.alloc(0), 'syncme pair v1', 32)).toString('hex');
+          writeFileSync(pairFile, secret, {flag: 'wx', mode: 0o600});
           message = await next();
         }
         if (message.op !== 'proof' || !hex64(message.nonce) || !same(message.proof, proof(secret, 'extension:' + nonce))) {
@@ -362,6 +422,9 @@ async function serve() {
         }
         clearTimeout(guard);
         send(socket, {op: 'ready', proof: proof(secret, 'server:' + message.nonce)});
+        const salt = Buffer.from(nonce + message.nonce, 'hex');
+        socket.out = {key: Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'hex'), salt, 'syncme wire v1 b2e', 32)), n: 0};
+        socket.in = {key: Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'hex'), salt, 'syncme wire v1 e2b', 32)), n: 0};
         if (bridge) {
           const previous = bridge;
           bridgeGone(previous);
@@ -369,7 +432,7 @@ async function serve() {
         }
         bridge = socket;
         for (;;) {
-          message = await next();
+          message = unseal(socket, await next());
           if (bridge !== socket) break;
           bridgeMessage(socket, message);
         }
@@ -447,7 +510,7 @@ function setup() {
 
 function mcp() {
   const tools = [
-    {name: 'copy_site', description: "Copy the user's login cookies for one site (like https://github.com) from their Chrome into the AI browser, then return the AI browser's CDP url. If the site isn't saved yet, the user gets asked in Chrome first.", inputSchema: {type: 'object', properties: {site: {type: 'string', description: 'exact origin, like https://github.com'}}, required: ['site']}},
+    {name: 'copy_site', description: "Copy the user's login cookies for one or more sites (like https://github.com) from their Chrome into the AI browser, then return the AI browser's CDP url. If a site isn't saved yet, the user gets asked in Chrome first. Sites that were not copied are listed in not_copied.", inputSchema: {type: 'object', properties: {sites: {type: 'array', items: {type: 'string', description: 'exact origin, like https://github.com'}, minItems: 1, maxItems: 100}}, required: ['sites']}},
     {name: 'open_browser', description: "Start the AI browser with the user's saved logins and return its CDP url. Connect with Playwright connect_over_cdp or any CDP client.", inputSchema: {type: 'object', properties: {}}},
     {name: 'close_browser', description: 'Close the AI browser.', inputSchema: {type: 'object', properties: {}}},
   ];
@@ -467,7 +530,7 @@ function mcp() {
     const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
     const method = message.method;
     if (method === 'tools/call' && !names.includes(params.name)) return write({jsonrpc: '2.0', id: message.id, error: {code: -32602, message: 'Unknown tool'}});
-    if (method === 'tools/call' && params.name === 'copy_site' && typeof args.site !== 'string') return write({jsonrpc: '2.0', id: message.id, error: {code: -32602, message: 'copy_site needs a site string'}});
+    if (method === 'tools/call' && params.name === 'copy_site' && (!Array.isArray(args.sites) || !args.sites.length || args.sites.length > 100 || args.sites.some(site => typeof site !== 'string'))) return write({jsonrpc: '2.0', id: message.id, error: {code: -32602, message: 'copy_site needs a sites array of 1 to 100 strings'}});
     let result;
     if (method === 'initialize') {
       const requested = params.protocolVersion;
@@ -478,8 +541,7 @@ function mcp() {
       let response;
       try {
         if (params.name === 'copy_site') {
-          origin(args.site);
-          response = await request({op: 'sync', origin: args.site});
+          response = await request({op: 'sync', origins: args.sites});
         } else response = await request({op: params.name === 'open_browser' ? 'open' : 'stop'});
       } catch {
         response = {error: 'syncme bridge unavailable or site invalid'};
@@ -487,7 +549,7 @@ function mcp() {
       let text;
       if (response.error) text = 'Failed: ' + response.error + '. The site must be an exact origin like https://github.com, Chrome must be open with the syncme extension, and the user must allow the site.';
       else if (params.name === 'close_browser') text = 'AI browser closed.';
-      else text = JSON.stringify({cdp: response.cdp, copied_cookies: response.count});
+      else text = JSON.stringify({cdp: response.cdp, copied_cookies: response.count, ...(response.failed.length && {not_copied: response.failed})});
       result = {content: [{type: 'text', text}], isError: Boolean(response.error)};
     } else if (method === 'ping') {
       result = {};
@@ -504,11 +566,10 @@ async function main() {
   if (command === 'pack') return pack();
   if (command === 'setup') return setup();
   if (command === 'unpair') return rmSync(join(STATE, 'pair'), {force: true});
-  if (!['sync', 'open', 'stop', 'shutdown'].includes(command) || process.argv.length !== (command === 'sync' ? 4 : 3)) throw Error('Usage: syncme-mcp open | sync https://example.com | stop | shutdown | setup | unpair | pack');
+  if (!['sync', 'open', 'stop', 'shutdown'].includes(command) || (command === 'sync' ? process.argv.length < 4 : process.argv.length !== 3)) throw Error('Usage: syncme-mcp open | sync https://example.com [https://other.com ...] | stop | shutdown | setup | unpair | pack');
   const message = {op: command};
   if (command === 'sync') {
-    origin(process.argv[3]);
-    message.origin = process.argv[3];
+    message.origins = process.argv.slice(3);
   }
   const response = await request(message);
   console.log(JSON.stringify(response));
