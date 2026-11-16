@@ -105,8 +105,8 @@ try {
     };
     return chrome.storage.local.set({approved: ['https://github.com', 'https://example.org']});
   });
-  const devtoolsPort = Number(readFileSync(join(work, 'user-chrome', 'DevToolsActivePort'), 'utf8').split('\n')[0]);
-  const targets = await (await fetch('http://127.0.0.1:' + devtoolsPort + '/json/list')).json();
+  const devtools_port = Number(readFileSync(join(work, 'user-chrome', 'DevToolsActivePort'), 'utf8').split('\n')[0]);
+  const targets = await (await fetch('http://127.0.0.1:' + devtools_port + '/json/list')).json();
   const target = targets.find(t => t.type === 'service_worker' && t.url.endsWith('/background.js')).webSocketDebuggerUrl;
   const devtools = new WebSocket(target);
   Object.assign(devtools, {frames: [], results: new Map(), calls: 0});

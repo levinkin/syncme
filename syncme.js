@@ -29,7 +29,7 @@ const proof = (token, purpose) => createHmac('sha256', token).update(purpose).di
 const same = (left, right) => typeof left === 'string' && typeof right === 'string' && left.length === right.length && timingSafeEqual(Buffer.from(left), Buffer.from(right));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-function privateState() {
+function private_state() {
   mkdirSync(STATE, {recursive: true, mode: 0o700});
   if (lstatSync(STATE).isSymbolicLink()) throw Error('Unsafe runtime directory');
   if (process.platform === 'win32') {
@@ -153,7 +153,7 @@ function covers(site, domain) {
   return base ? HOST.test(host) && (host === base || host.endsWith('.' + base)) : domain === site.hostname;
 }
 
-function cookiesFor(site, cookies) {
+function cookies_for(site, cookies) {
   if (!Array.isArray(cookies) || cookies.length > 3000) throw rejected('cookies');
   const result = [];
   for (const c of cookies) {
@@ -178,7 +178,7 @@ function cookiesFor(site, cookies) {
   return result;
 }
 
-function connectSocket(url) {
+function connect_socket(url) {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url, {handshakeTimeout: 5000});
     socket.on('error', () => reject(Error('offline')));
@@ -186,12 +186,12 @@ function connectSocket(url) {
   });
 }
 
-async function startServer(launch) {
-  const token = privateState();
+async function start_server(launch) {
+  const token = private_state();
   for (let attempt = 0; attempt < 61; attempt++) {
     let socket;
     try {
-      socket = await connectSocket(CLIENT_URL);
+      socket = await connect_socket(CLIENT_URL);
       await authenticate(socket, messages(socket), token);
       return socket;
     } catch {
@@ -205,7 +205,7 @@ async function startServer(launch) {
 }
 
 async function request(message) {
-  const socket = await startServer(message.op === 'sync' || message.op === 'open');
+  const socket = await start_server(message.op === 'sync' || message.op === 'open');
   if (!socket) return {ok: true};
   const next = messages(socket);
   try {
@@ -224,7 +224,7 @@ function verify(info, done) {
 }
 
 async function serve() {
-  const token = privateState();
+  const token = private_state();
   const server = new WebSocketServer({host: '127.0.0.1', port: PORT, maxPayload: LIMIT, verifyClient: verify});
   server.on('error', () => process.exit(0));
   await new Promise(resolve => server.once('listening', resolve));
@@ -317,7 +317,7 @@ async function serve() {
         const site = origin(value);
         const response = await ask({op: 'sync', origin: value});
         if (response.origin !== value || response.error) throw rejected('bridge');
-        const cookies = cookiesFor(site, response.cookies);
+        const cookies = cookies_for(site, response.cookies);
         for (const cookie of await context.cookies()) {
           if (covers(site, cookie.domain) && (site.protocol === 'https:' || !cookie.secure)) await context.clearCookies({name: cookie.name, domain: cookie.domain, path: cookie.path});
         }
@@ -408,8 +408,8 @@ async function serve() {
     (async () => {
       const guard = setTimeout(() => socket.close(), 10000);
       try {
-        const pairFile = join(STATE, 'pair');
-        let secret = existsSync(pairFile) ? readFileSync(pairFile, 'utf8') : '';
+        const pair_file = join(STATE, 'pair');
+        let secret = existsSync(pair_file) ? readFileSync(pair_file, 'utf8') : '';
         const nonce = randomBytes(32).toString('hex');
         const pair = secret ? undefined : generateKeyPairSync('x25519');
         send(socket, pair ? {op: 'hello', nonce, paired: false, key: Buffer.from(pair.publicKey.export({format: 'jwk'}).x, 'base64url').toString('base64')} : {op: 'hello', nonce, paired: true});
@@ -419,7 +419,7 @@ async function serve() {
           if (message.op !== 'pair' || key.length !== 32 || key.toString('base64') !== message.key) return socket.close();
           const shared = diffieHellman({privateKey: pair.privateKey, publicKey: createPublicKey({key: {kty: 'OKP', crv: 'X25519', x: key.toString('base64url')}, format: 'jwk'})});
           secret = Buffer.from(hkdfSync('sha256', shared, Buffer.alloc(0), 'syncme pair v1', 32)).toString('hex');
-          writeFileSync(pairFile, secret, {flag: 'wx', mode: 0o600});
+          writeFileSync(pair_file, secret, {flag: 'wx', mode: 0o600});
           message = await next();
         }
         if (message.op !== 'proof' || !hex64(message.nonce) || !same(message.proof, proof(secret, 'extension:' + nonce))) {
@@ -473,12 +473,12 @@ function pack() {
 
 function setup() {
   const home = homedir();
-  const appData = process.platform === 'win32' ? process.env.APPDATA || join(home, 'AppData', 'Roaming') : join(home, 'Library', 'Application Support');
-  const vscode = join(appData, 'Code', 'User');
+  const app_data = process.platform === 'win32' ? process.env.APPDATA || join(home, 'AppData', 'Roaming') : join(home, 'Library', 'Application Support');
+  const vscode = join(app_data, 'Code', 'User');
   const configured = [];
   const failed = [];
   for (const [name, file, key, server] of [
-    ['claude desktop', join(appData, 'Claude', 'claude_desktop_config.json'), 'mcpServers', SERVER],
+    ['claude desktop', join(app_data, 'Claude', 'claude_desktop_config.json'), 'mcpServers', SERVER],
     ['cursor', join(home, '.cursor', 'mcp.json'), 'mcpServers', SERVER],
     ['windsurf', join(home, '.codeium', 'windsurf', 'mcp_config.json'), 'mcpServers', SERVER],
     ['gemini', join(home, '.gemini', 'settings.json'), 'mcpServers', SERVER],
