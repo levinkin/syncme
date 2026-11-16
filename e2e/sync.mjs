@@ -1,4 +1,3 @@
-// runs the real bridge and extension in a throwaway home and checks cookie scope, wire encryption, tampering, profile cleanup and memory
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
