@@ -434,7 +434,12 @@ async function operate(session, socket, message) {
       const origins = op === 'sync' ? [...new Set(message.origins)] : [];
       const {count, failed} = await copy_into_browser(session, [...origins], false);
       let all_failed = origins.length > 0;
-      for (const site of origins) if (!failed.includes(site)) all_failed = false;
+      for (const site of origins) {
+        if (!failed.includes(site)) {
+          all_failed = false;
+          break;
+        }
+      }
       send(socket, all_failed ? {error: 'Request rejected', failed} : {ok: true, cdp: session.endpoint, count, failed});
     } else if (op === 'stop' || op === 'shutdown') {
       await close_browser(session);
