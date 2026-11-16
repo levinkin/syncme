@@ -1,6 +1,6 @@
 const status = document.querySelector('#status');
 const question = document.querySelector('#question');
-const copyButton = document.querySelector('#copy');
+const copy_button = document.querySelector('#copy');
 let site;
 const requested = new URLSearchParams(location.search).get('site');
 if (requested) {
@@ -10,7 +10,7 @@ if (requested) {
   document.querySelector('#options').hidden = true;
   const deny = document.querySelector('#deny');
   deny.hidden = false;
-  copyButton.onclick = () => chrome.runtime.sendMessage({op: 'allow', answer: true});
+  copy_button.onclick = () => chrome.runtime.sendMessage({op: 'allow', answer: true});
   deny.onclick = () => chrome.runtime.sendMessage({op: 'allow', answer: false});
 } else {
   chrome.tabs.query({active: true, currentWindow: true}).then(([tab]) => {
@@ -21,11 +21,11 @@ if (requested) {
       question.textContent = `Copy ${whole ? whole + ' and every subdomain' : u.host} to your AI browser?`;
     } else {
       question.textContent = 'Open a website to copy it.';
-      copyButton.hidden = true;
+      copy_button.hidden = true;
     }
   });
-  copyButton.onclick = async () => {
-    copyButton.disabled = true;
+  copy_button.onclick = async () => {
+    copy_button.disabled = true;
     status.textContent = 'Copying...';
     try {
       const result = await chrome.runtime.sendMessage({op: 'copy', origin: site});
@@ -33,7 +33,7 @@ if (requested) {
     } catch (_) {
       status.textContent = 'Copy failed.';
     } finally {
-      copyButton.disabled = false;
+      copy_button.disabled = false;
     }
   };
   document.querySelector('#options').onclick = () => chrome.runtime.openOptionsPage();

@@ -1,4 +1,3 @@
-// runs the real bridge and extension in a throwaway home and checks cookie scope, wire encryption, tampering, profile cleanup and memory
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
@@ -106,8 +105,8 @@ try {
     };
     return chrome.storage.local.set({approved: ['https://github.com', 'https://example.org']});
   });
-  const devtoolsPort = Number(readFileSync(join(work, 'user-chrome', 'DevToolsActivePort'), 'utf8').split('\n')[0]);
-  const targets = await (await fetch('http://127.0.0.1:' + devtoolsPort + '/json/list')).json();
+  const devtools_port = Number(readFileSync(join(work, 'user-chrome', 'DevToolsActivePort'), 'utf8').split('\n')[0]);
+  const targets = await (await fetch('http://127.0.0.1:' + devtools_port + '/json/list')).json();
   const target = targets.find(t => t.type === 'service_worker' && t.url.endsWith('/background.js')).webSocketDebuggerUrl;
   const devtools = new WebSocket(target);
   Object.assign(devtools, {frames: [], results: new Map(), calls: 0});
@@ -143,6 +142,8 @@ try {
 
   const mcp = spawn(process.execPath, [join(app, 'syncme.js')], {env, stdio: ['pipe', 'pipe', 'ignore']});
   const lines = createInterface({input: mcp.stdout})[Symbol.asyncIterator]();
+  mcp.stdin.write(JSON.stringify({jsonrpc: '2.0', id: 0, method: 'tools/call', params: {name: 'copy_site', arguments: {sites: ['https://github.com', 7]}}}) + '\n');
+  assert.deepEqual(JSON.parse((await lines.next()).value).error, {code: -32602, message: 'copy_site needs a sites array of 1 to 100 strings'});
   mcp.stdin.write(JSON.stringify({jsonrpc: '2.0', id: 1, method: 'tools/call', params: {name: 'copy_site', arguments: {sites: ['https://github.com', 'https://denied.test']}}}) + '\n');
   const tool = JSON.parse((await lines.next()).value).result;
   mcp.kill();
