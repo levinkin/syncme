@@ -88,7 +88,9 @@ async function handle(ws, event) {
     } else if (message.op === 'refused') return refuse(ws, 'other');
     else if (message.op === 'ready' && ws.nonce && message.proof === await sign(ws.secret, 'server:' + ws.nonce)) {
       const base = await crypto.subtle.importKey('raw', Uint8Array.fromHex(ws.secret), 'HKDF', false, ['deriveKey']);
-      ws.keys = await Promise.all(['b2e', 'e2b'].map(d => crypto.subtle.deriveKey({name: 'HKDF', hash: 'SHA-256', salt: Uint8Array.fromHex(ws.peer + ws.nonce), info: text.encode('syncme wire v1 ' + d)}, base, {name: 'AES-GCM', length: 256}, false, ['encrypt', 'decrypt'])));
+      const keys = [];
+      for (const direction of ['b2e', 'e2b']) keys.push(crypto.subtle.deriveKey({name: 'HKDF', hash: 'SHA-256', salt: Uint8Array.fromHex(ws.peer + ws.nonce), info: text.encode('syncme wire v1 ' + direction)}, base, {name: 'AES-GCM', length: 256}, false, ['encrypt', 'decrypt']));
+      ws.keys = await Promise.all(keys);
       if (socket !== ws || ws.readyState !== WebSocket.OPEN) return;
       ws.verified = true;
       await chrome.storage.session.set({connected: true, pairing: null});
@@ -110,7 +112,8 @@ async function handle(ws, event) {
     }
     stage = 'cookies';
     const found = await chrome.cookies.getAll(domain(u) ? {domain: domain(u)} : {url: u.origin + '/'});
-    const cookies = found.filter(c => !c.partitionKey && (!c.secure || u.protocol === 'https:'));
+    const cookies = [];
+    for (const cookie of found) if (!cookie.partitionKey && (!cookie.secure || u.protocol === 'https:')) cookies.push(cookie);
     seal(ws, {id: message.id, origin: u.origin, cookies});
   } catch (_) { seal(ws, {id: message.id, error: stage === 'cookies' ? 'Cookie API refused' : 'Origin unavailable or not approved'}); }
 }

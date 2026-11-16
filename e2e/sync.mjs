@@ -142,6 +142,8 @@ try {
 
   const mcp = spawn(process.execPath, [join(app, 'syncme.js')], {env, stdio: ['pipe', 'pipe', 'ignore']});
   const lines = createInterface({input: mcp.stdout})[Symbol.asyncIterator]();
+  mcp.stdin.write(JSON.stringify({jsonrpc: '2.0', id: 0, method: 'tools/call', params: {name: 'copy_site', arguments: {sites: ['https://github.com', 7]}}}) + '\n');
+  assert.deepEqual(JSON.parse((await lines.next()).value).error, {code: -32602, message: 'copy_site needs a sites array of 1 to 100 strings'});
   mcp.stdin.write(JSON.stringify({jsonrpc: '2.0', id: 1, method: 'tools/call', params: {name: 'copy_site', arguments: {sites: ['https://github.com', 'https://denied.test']}}}) + '\n');
   const tool = JSON.parse((await lines.next()).value).result;
   mcp.kill();

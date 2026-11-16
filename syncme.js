@@ -433,7 +433,9 @@ async function operate(session, socket, message) {
       if (op === 'sync' && (!Array.isArray(message.origins) || !message.origins.length || message.origins.length > 100)) throw rejected('origin');
       const origins = op === 'sync' ? [...new Set(message.origins)] : [];
       const {count, failed} = await copy_into_browser(session, [...origins], false);
-      send(socket, origins.length && origins.every(site => failed.includes(site)) ? {error: 'Request rejected', failed} : {ok: true, cdp: session.endpoint, count, failed});
+      let all_failed = origins.length > 0;
+      for (const site of origins) if (!failed.includes(site)) all_failed = false;
+      send(socket, all_failed ? {error: 'Request rejected', failed} : {ok: true, cdp: session.endpoint, count, failed});
     } else if (op === 'stop' || op === 'shutdown') {
       await close_browser(session);
       send(socket, {ok: true});
@@ -515,7 +517,8 @@ const TOOLS = [
   {name: 'close_browser', description: 'Close the AI browser.', inputSchema: {type: 'object', properties: {}}},
 ];
 const VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
-const TOOL_NAMES = TOOLS.map(tool => tool.name);
+const TOOL_NAMES = [];
+for (const tool of TOOLS) TOOL_NAMES.push(tool.name);
 
 async function respond(line) {
   let message;
@@ -529,7 +532,11 @@ async function respond(line) {
   const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
   const method = message.method;
   if (method === 'tools/call' && !TOOL_NAMES.includes(params.name)) return process.stdout.write(JSON.stringify({jsonrpc: '2.0', id: message.id, error: {code: -32602, message: 'Unknown tool'}}) + '\n');
-  if (method === 'tools/call' && params.name === 'copy_site' && (!Array.isArray(args.sites) || !args.sites.length || args.sites.length > 100 || args.sites.some(site => typeof site !== 'string'))) return process.stdout.write(JSON.stringify({jsonrpc: '2.0', id: message.id, error: {code: -32602, message: 'copy_site needs a sites array of 1 to 100 strings'}}) + '\n');
+  if (method === 'tools/call' && params.name === 'copy_site') {
+    let valid = Array.isArray(args.sites) && args.sites.length > 0 && args.sites.length <= 100;
+    if (valid) for (const site of args.sites) if (typeof site !== 'string') valid = false;
+    if (!valid) return process.stdout.write(JSON.stringify({jsonrpc: '2.0', id: message.id, error: {code: -32602, message: 'copy_site needs a sites array of 1 to 100 strings'}}) + '\n');
+  }
   let result;
   if (method === 'initialize') {
     const requested = params.protocolVersion;
